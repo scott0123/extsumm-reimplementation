@@ -16,10 +16,11 @@ Reimplementation of the model as described in *Extractive Summarization of Long 
 
 `#TODO`
 
-## Original model Github Page
+## ExtSumm model Resources
 
-[Page](https://github.com/Wendy-Xiao/Extsumm_local_global_context)
+[GitHub Page](https://github.com/Wendy-Xiao/Extsumm_local_global_context)
+[PDF](https://arxiv.org/pdf/1909.08089.pdf)
 
-## Data Source GitHub Page
+## Data source Resources
 
-[Page](https://github.com/armancohan/long-summarization)
+[GitHub Page](https://github.com/armancohan/long-summarization)
