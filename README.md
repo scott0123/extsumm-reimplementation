@@ -18,8 +18,8 @@ Reimplementation of the model as described in Extractive Summarization of Long D
 
 ## Original model Github Page
 
-![Page][https://github.com/Wendy-Xiao/Extsumm_local_global_context]
+[Page](https://github.com/Wendy-Xiao/Extsumm_local_global_context)
 
 ## Data Source GitHub Page
 
-![Page][https://github.com/armancohan/long-summarization]
+[Page](https://github.com/armancohan/long-summarization)
