@@ -19,7 +19,8 @@ Reimplementation of the model as described in *Extractive Summarization of Long 
 ## ExtSumm model Resources
 
 [GitHub Page](https://github.com/Wendy-Xiao/Extsumm_local_global_context)
-[PDF](https://arxiv.org/pdf/1909.08089.pdf)
+
+[Paper PDF](https://arxiv.org/pdf/1909.08089.pdf)
 
 ## Data source Resources
 
