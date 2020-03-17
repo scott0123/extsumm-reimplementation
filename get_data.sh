@@ -24,4 +24,4 @@ curl -s http://nlp.stanford.edu/data/glove.6B.zip -o glove.6B.zip
 
 # Step 6: unzip it, move it, and delete the zip file
 unzip "glove.6B.zip"
-mv 
+mv glove.6B embeddings
