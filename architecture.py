@@ -19,12 +19,19 @@ class ExtSummModel(nn.Module):
             ...,
             bidirectional=True,
         )
-        # Dense layer
-        self.dense = nn.Linear(
+        # Attention-related parameters
+        self.v_attention = ...
+        self.W_attention = ...
+        # Dense layer 1
+        self.dense1 = nn.Linear(
             ...,
         )
         # Dropout layer
         self.dropout = nn.Dropout(...)
+        # Dense layer 2
+        self.dense2 = nn.Linear(
+            ...,
+        )
         # Use GPU if available
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -51,8 +58,21 @@ class ExtSummModel(nn.Module):
 
 
     def decoder(sent_rep, doc_rep, topic_rep):
-        # TODO
-        pass
+        cat_doc_sent = torch.cat((doc_rep, sent_rep), 1)
+        cat_topic_sent = torch.cat((topic_rep, sent_rep), 1)
+        doc_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_doc_sent)))
+        topic_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_doc_topic)))
+        sum_scores = doc_scores + topic_scores
+        doc_weights = doc_scores / sum_scores
+        topic_weights = topic_scores / sum_scores
+        context = torch.mm(doc_weights, doc_rep) + torch.mm(topic_weights, topic_rep)
+        input_ = torch.cat((sent_rep, context), 1)
+        h = self.dense1(input_)
+        h = F.relu(h)
+        h = self.dropout(h)
+        # final part altered to use logits for computational stability
+        logits = self.dense2(h)
+        return logits
 
 
     def fit(self, Xs, ys, lr, epochs, batch_size=32):
