@@ -48,8 +48,8 @@ class ExtSummModel(nn.Module):
 
 
     def sent_encoder(self, Xs):
-        # TODO
-        pass
+        # Xs: (batch_size, num_doc, num_sentences, word_dim])
+        return torch.mean(Xs, -2)
 
 
     def doc_encoder(self, sent_emb):
