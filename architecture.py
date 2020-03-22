@@ -2,22 +2,26 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.nn.utils.rnn import pad_sentence, pad_packed_sequence, pack_padded_sequence
+import numpy as np
+from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
 
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
-    def __init__(self, ...): # TODO
+    def __init__(self, input_size, hidden_size, fc_num, gru_layers=1):
         super().__init__()
         # Used to save model hyperparamers
         self.config = {
             # TODO
+            'hidden_size': hidden_size
         }
-        # Embedding layer
-        self.embeddings = nn.Embedding.from_pretrained(torch.FloatTensor(...), freeze=False)
+
         # Bidirectional GRU layer
         self.bi_gru = nn.GRU(
-            ...,
-            bidirectional=True,
+            input_size,
+            hidden_size,
+            gru_layers,
+            batch_first=True,
+            bidirectional=True
         )
         # Attention-related parameters
         self.v_attention = ...
@@ -39,29 +43,36 @@ class ExtSummModel(nn.Module):
             self.device = torch.device("cpu")
         self.to(self.device)
 
-
-    def forward(self, Xs):
-        sent_emb = self.sent_encoder(Xs)
-        sent_rep, doc_rep, topic_rep = self.doc_encoder(sent_emb)
+    def forward(self, packed_sent_embedds, doc_lengths): # Xs: batch_size x num_sentences (varies) * sent_dim
+        # According to the authors' implementation, sentences' embeddings are directly passed to the model
+        # No fine tune on the embeddings
+        sent_rep, doc_rep, topic_rep = self.doc_encoder(packed_sent_embedds)
         logits = self.decoder(sent_rep, doc_rep, topic_rep)
         return logits
 
+    def doc_encoder(self, packed_sent_embedds):
+        gru_out_packed, hidden = self.bi_gru(packed_sent_embedds)
 
-    def sent_encoder(self, Xs):
-        # Xs: (batch_size, num_doc, num_sentences, word_dim])
-        return torch.mean(Xs, -2)
+        pad_gru_output, _ = pad_packed_sequence(gru_out_packed, batch_first=True)
+        sent_rep = pad_gru_output
+        batch_size, seq_len, _ = pad_gru_output.size()
+
+        # TODO: confirm hidden shape is batch_size x num_layers * num_directions x hidden_size
+        doc_rep = hidden.view(hidden.size()[0], self.config['hidden_size'] * 2).expand(-1, seq_len, -1)
+        # TODO
+        topic_rep = None
+        return sent_rep, doc_rep, topic_rep
 
 
     def doc_encoder(self, sent_emb):
         # TODO
         pass
 
-
-    def decoder(sent_rep, doc_rep, topic_rep):
+    def decoder(self, sent_rep, doc_rep, topic_rep):
         cat_doc_sent = torch.cat((doc_rep, sent_rep), 1)
         cat_topic_sent = torch.cat((topic_rep, sent_rep), 1)
         doc_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_doc_sent)))
-        topic_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_doc_topic)))
+        topic_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_topic_sent)))
         sum_scores = doc_scores + topic_scores
         doc_weights = doc_scores / sum_scores
         topic_weights = topic_scores / sum_scores
