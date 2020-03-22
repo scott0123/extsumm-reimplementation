@@ -57,11 +57,11 @@ class ExtSummModel(nn.Module):
         pass
 
 
-    def decoder(sent_rep, doc_rep, topic_rep):
+    def decoder(self, sent_rep, doc_rep, topic_rep):
         cat_doc_sent = torch.cat((doc_rep, sent_rep), 1)
         cat_topic_sent = torch.cat((topic_rep, sent_rep), 1)
         doc_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_doc_sent)))
-        topic_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_doc_topic)))
+        topic_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_topic_sent)))
         sum_scores = doc_scores + topic_scores
         doc_weights = doc_scores / sum_scores
         topic_weights = topic_scores / sum_scores
