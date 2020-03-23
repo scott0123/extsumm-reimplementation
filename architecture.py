@@ -8,7 +8,7 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
-    def __init__(self, input_size, hidden_size, fc_num, gru_layers=1, glove_dir=None, word_dim=100, vocab=None):
+    def __init__(self, input_size, hidden_size, fc_num, gru_layers=1, glove_dir=None, word_dim=100):
         super().__init__()
         # Used to save model hyperparamers
         self.config = {
@@ -19,11 +19,11 @@ class ExtSummModel(nn.Module):
         }
 
         # Embedding layer
-        weights_matrix = self.create_embeddings(glove_dir, vocab)
-        num_embeddings, embedding_dim = weights_matrix.size()
-        self.embedding_layer = nn.Embedding(num_embeddings, embedding_dim)
-        self.embedding_layer.from_pretrained(torch.from_numpy(weights_matrix),
-                                             freeze=self.config['trainable_embedding'])
+        self.UNK = "UNK"
+        weight_matrix, word2idx = self.create_embeddings(glove_dir)
+        # num_embeddings, embedding_dim = weights_matrix.size()
+        self.embedding_layer = nn.Embedding(len(weight_matrix), self.config['trainable_embedding'])
+        self.embedding_layer.from_pretrained(torch.from_numpy(weight_matrix), freeze=self.config['trainable_embedding'])
 
         # Bidirectional GRU layer
         self.bi_gru = nn.GRU(
@@ -53,11 +53,11 @@ class ExtSummModel(nn.Module):
             self.device = torch.device("cpu")
         self.to(self.device)
 
-    def forward(self, packed_sent_embedds, topic_start_ends):
+    def forward(self, documents, topic_start_ends):
         # packed_sent_embedds: batch_size x doc_num x num_sentences x sent_dim
         # topic_start_ends: batch_size x num_topics (varies) * 2, sentence indexes should start from 1
 
-        sent_encoded = self.sent_encoder(packed_sent_embedds)   # (batch_size x doc_num x num_sentences x word_dim)
+        sent_encoded = self.sent_encoder(documents)   # (batch_size x doc_num x num_sentences x word_dim)
 
         # TODO: flat the sent_encoded from
         # (batch_size x doc_num x num_sentences x word_dim) -> (batch_size x num_sentences x word_dim)
@@ -65,32 +65,32 @@ class ExtSummModel(nn.Module):
         logits = self.decoder(sent_rep, doc_rep, topic_rep)
         return logits
 
-    def create_embeddings(self, glove_dir, vocab):
+    def create_embeddings(self, glove_dir):
         """
         :param glove_dir:
         :param vocab: dict, the entire vocabulary from word to index, from train, test and eval set
-        :return:
+        :return: embedding_matrix, word2idx
         """
-        embedding_matrix = dict()
+        word2idx = dict()
+        idx = 0
+        embedding_matrix = []
 
         with open(glove_dir, 'rb') as glove_in:
             for line in glove_in:
                 line = line.decode().split()
                 word = line[0]
+                word2idx[word] = idx
+                idx += 1
                 embedding = np.array(line[1:]).astype(np.float)
-                embedding_matrix[word] = embedding
+                embedding_matrix.append(embedding)
 
-        vocab_size = len(vocab)
-        weights_matrix = np.zeros((vocab_size, self.config['word_dim']))
-        for word, i in vocab.items():
-            try:
-                weights_matrix[i] = embedding_matrix[word]
-            except KeyError:
-                weights_matrix[i] = np.random.normal(scale=0.6, size=(self.config['word_dim'],))
-        return weights_matrix
+        # last entry reserved for OOV words
+        embedding_matrix.append(np.random.normal(scale=0.6, size=(self.config['word_dim'],)))
+        word2idx[self.UNK] = idx
+        return embedding_matrix, word2idx
 
-    def sent_encoder(self, packed_sent_embedds):
-        sent_encoded = self.embedding_layer(packed_sent_embedds)    # (batch, doc_dum, sentence_num, word_num, word_dim)
+    def sent_encoder(self, documents):
+        sent_encoded = self.embedding_layer(documents)    # (batch, doc_dum, sentence_num, word_num, word_dim)
         return torch.mean(sent_encoded, -2)      # (batch, doc_dum, sentence_num, word_dim)
 
     def doc_encoder(self, packed_sent_embedds, topic_start_ends):
