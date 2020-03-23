@@ -13,17 +13,17 @@ class ExtSummModel(nn.Module):
         # Used to save model hyperparamers
         self.config = {
             # TODO
-            'hidden_size': hidden_size,
-            'word_dim': word_dim,
-            'trainable_embedding': True,
+            "hidden_size": hidden_size,
+            "word_dim": word_dim,
+            "trainable_embedding": True,
         }
 
         # Embedding layer
         self.UNK = "UNK"
         weight_matrix, word2idx = self.create_embeddings(glove_dir)
         # num_embeddings, embedding_dim = weights_matrix.size()
-        self.embedding_layer = nn.Embedding(len(weight_matrix), self.config['trainable_embedding'])
-        self.embedding_layer.from_pretrained(torch.from_numpy(weight_matrix), freeze=self.config['trainable_embedding'])
+        self.embedding_layer = nn.Embedding(len(weight_matrix), self.config["trainable_embedding"])
+        self.embedding_layer.from_pretrained(torch.from_numpy(weight_matrix), freeze=self.config["trainable_embedding"])
 
         # Bidirectional GRU layer
         self.bi_gru = nn.GRU(
@@ -53,18 +53,6 @@ class ExtSummModel(nn.Module):
             self.device = torch.device("cpu")
         self.to(self.device)
 
-    def forward(self, documents, topic_start_ends):
-        # packed_sent_embedds: batch_size x doc_num x num_sentences x sent_dim
-        # topic_start_ends: batch_size x num_topics (varies) * 2, sentence indexes should start from 1
-
-        sent_encoded = self.sent_encoder(documents)   # (batch_size x doc_num x num_sentences x word_dim)
-
-        # TODO: flat the sent_encoded from
-        # (batch_size x doc_num x num_sentences x word_dim) -> (batch_size x num_sentences x word_dim)
-        sent_rep, doc_rep, topic_rep = self.encoder(sent_encoded, topic_start_ends)
-        logits = self.decoder(sent_rep, doc_rep, topic_rep)
-        return logits
-
     def create_embeddings(self, glove_dir):
         """
         :param glove_dir:
@@ -75,7 +63,7 @@ class ExtSummModel(nn.Module):
         idx = 0
         embedding_matrix = []
 
-        with open(glove_dir, 'rb') as glove_in:
+        with open(glove_dir, "rb") as glove_in:
             for line in glove_in:
                 line = line.decode().split()
                 word = line[0]
@@ -84,28 +72,65 @@ class ExtSummModel(nn.Module):
                 embedding = np.array(line[1:]).astype(np.float)
                 embedding_matrix.append(embedding)
 
-        # last entry reserved for OOV words
-        embedding_matrix.append(np.random.normal(scale=0.6, size=(self.config['word_dim'],)))
+        # last entry reserved for OoV words
+        embedding_matrix.append(np.random.normal(scale=0.6, size=(self.config["word_dim"],)))
         word2idx[self.UNK] = idx
         return embedding_matrix, word2idx
 
-    def sent_encoder(self, documents):
-        sent_encoded = self.embedding_layer(documents)    # (batch, doc_dum, sentence_num, word_num, word_dim)
-        return torch.mean(sent_encoded, -2)      # (batch, doc_dum, sentence_num, word_dim)
+    def forward(self, documents, topic_start_ends):
+        # packed_sent_embedds: batch_size x num_sent x num_word x sent_dim (list)
+        # topic_start_ends: batch_size x num_topics (varies) * 2, sentence indexes should start from 1 (list)
 
-    def doc_encoder(self, packed_sent_embedds, topic_start_ends):
-        gru_out_packed, hidden = self.bi_gru(packed_sent_embedds)
+        sent_encoded = self.sent_encoder(documents)   # (batch_size x num_sent x num_word x word_dim)
+
+        # (batch_size x num_sent x num_word x word_dim) -> (batch_size x num_word x word_dim)
+        sent_rep, doc_rep, topic_rep = self.doc_encoder(sent_encoded, topic_start_ends)
+        logits = self.decoder(sent_rep, doc_rep, topic_rep)
+        return logits
+
+    def sent_encoder(self, documents):
+        """
+        documents: list (batch) of list (doc) of list (sent) word embeddings indices
+        """
+        # number of sentences in a doc
+        actual_lengths = []
+        embeddings = []
+        for doc in documents:
+            # all average sentence vectors in the document
+            avg_sent_vecs = []
+            for sent in doc:
+                word_indices_tensor = torch.LongTensor(sent)
+                word_embedding_tensor = self.embeddings(word_indices_tensor)
+                avg_sent_vec = torch.mean(word_embedding_tensor, dim=1)
+                avg_sent_vecs.append(avg_sent_vec)
+            embeddings.append(torch.stack(avg_sent_vecs))
+            actual_lengths.append(len(doc))
+
+        padded_embeddings = pad_sequence(
+            embeddings,
+            batch_first=True,
+        )
+        packed_sent_embeddings = pack_padded_sequence(
+            padded_embeddings,
+            actual_lengths,
+            batch_first=True,
+            enforce_sorted=False,
+        )
+        return packed_sent_embeddings
+
+    def doc_encoder(self, packed_sent_embeddings, topic_start_ends):
+        gru_out_packed, hidden = self.bi_gru(packed_sent_embeddings)
 
         pad_gru_output, _ = pad_packed_sequence(gru_out_packed, batch_first=True)
         sent_rep = pad_gru_output  # batch_size x seq_len x num_directions * hidden_size
         batch_size, seq_len, twice_hidden_size = pad_gru_output.shape
 
-        # TODO: confirm hidden's shape is batch_size x num_layers * num_directions x hidden_size
+        # TODO: confirm hidden"s shape is batch_size x num_layers * num_directions x hidden_size
         doc_rep = hidden.view(batch_size, twice_hidden_size).expand(-1, seq_len, -1)
         topic_rep = np.zeros(pad_gru_output.shape)
-        hidden_size = self.config['hidden_size']
+        hidden_size = self.config["hidden_size"]
         # Pad zeros at the beginning and the end of hidden states
-        pad_gru_output = F.pad(pad_gru_output, pad=(0, 0, 1, 1), mode='constant', value=0)
+        pad_gru_output = F.pad(pad_gru_output, pad=(0, 0, 1, 1), mode="constant", value=0)
         for batch_ind in range(batch_size):
             start_ends = topic_start_ends[batch_ind]  # num_topics * 2
             num_topics, _ = start_ends.shape
@@ -165,7 +190,7 @@ class ExtSummModel(nn.Module):
                 loss.backward()
                 # Perform one step of parameter update using the newly-computed gradients
                 optimizer.step()
-                print(f'Epoch {epoch+1}, batch {batch+1}, loss={loss.item():.4f}, acc={accuracy:.4f}')
+                print(f"Epoch {epoch+1}, batch {batch+1}, loss={loss.item():.4f}, acc={accuracy:.4f}")
     
 
     def predict(self, Xs):
