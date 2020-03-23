@@ -59,7 +59,7 @@ class Processor:
     def process(self):
         with open(self.original_data) as data_in:
             for i, article in enumerate(tqdm(data_in.read().splitlines())):
-                if i % processing == 0:
+                if i % 5 == processing:
                     article = json.loads(article)
                     abstract = self.process_abstract(' '.join(article['abstract_text']))
                     with open(self.abstract_output, "a+") as abstract_out:
@@ -110,8 +110,8 @@ class Processor:
 if __name__ == '__main__':
     processing = int(sys.argv[1])
     print("running process ", processing)
-    original_data = "./arxiv-dataset/test.txt"
-    pre_process = Processor(original_data, output_dir="./preprocessed/test/", processing=processing)
+    original_data = "./arxiv-dataset/val.txt"
+    pre_process = Processor(original_data, output_dir="./preprocessed/val/", processing=processing)
     pre_process.process()
 
 
