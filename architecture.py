@@ -5,6 +5,7 @@ from torch.nn import functional as F
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
 
+
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
     def __init__(self, input_size, hidden_size, fc_num, gru_layers=1):
@@ -43,30 +44,45 @@ class ExtSummModel(nn.Module):
             self.device = torch.device("cpu")
         self.to(self.device)
 
-    def forward(self, packed_sent_embedds, doc_lengths): # Xs: batch_size x num_sentences (varies) * sent_dim
+    def forward(self, packed_sent_embedds, topic_start_ends):
+        # Xs: batch_size x num_sentences (varies) * sent_dim
+        # topic_start_ends: batch_size x num_topics (varies) * 2, sentence indexes should start from 1
+
         # According to the authors' implementation, sentences' embeddings are directly passed to the model
         # No fine tune on the embeddings
-        sent_rep, doc_rep, topic_rep = self.doc_encoder(packed_sent_embedds)
+        sent_rep, doc_rep, topic_rep = self.encoder(packed_sent_embedds, topic_start_ends)
         logits = self.decoder(sent_rep, doc_rep, topic_rep)
         return logits
 
-    def doc_encoder(self, packed_sent_embedds):
+    def encoder(self, packed_sent_embedds, topic_start_ends):
         gru_out_packed, hidden = self.bi_gru(packed_sent_embedds)
 
         pad_gru_output, _ = pad_packed_sequence(gru_out_packed, batch_first=True)
-        sent_rep = pad_gru_output
-        batch_size, seq_len, _ = pad_gru_output.size()
+        sent_rep = pad_gru_output  # batch_size x seq_len x num_directions * hidden_size
+        batch_size, seq_len, twice_hidden_size = pad_gru_output.shape
 
-        # TODO: confirm hidden shape is batch_size x num_layers * num_directions x hidden_size
-        doc_rep = hidden.view(hidden.size()[0], self.config['hidden_size'] * 2).expand(-1, seq_len, -1)
-        # TODO
-        topic_rep = None
+        # TODO: confirm hidden's shape is batch_size x num_layers * num_directions x hidden_size
+        doc_rep = hidden.view(batch_size, twice_hidden_size).expand(-1, seq_len, -1)
+        topic_rep = np.zeros(pad_gru_output.shape)
+        hidden_size = self.config['hidden_size']
+        # Pad zeros at the beginning and the end of hidden states
+        pad_gru_output = F.pad(pad_gru_output, pad=(0, 0, 1, 1), mode='constant', value=0)
+        for batch_ind in range(batch_size):
+            start_ends = topic_start_ends[batch_ind]  # num_topics * 2
+            num_topics, _ = start_ends.shape
+            topic_mat = np.zeros((num_topics, twice_hidden_size)) # num_topics x num_directions * hidden_size
+            for topic_ind in range(num_topics):
+                # forward
+                topic_mat[topic_ind, :hidden_size] = pad_gru_output[batch_ind, start_ends[topic_ind+1, 1], :hidden_size] - \
+                                             pad_gru_output[batch_ind, start_ends[topic_ind, 1], :hidden_size]
+                # backward
+                topic_mat[topic_ind, hidden_size:] = pad_gru_output[batch_ind, start_ends[topic_ind, 0], hidden_size:] - \
+                                             pad_gru_output[batch_ind, start_ends[topic_ind+1, 0], hidden_size:]
+            for topic_ind in range(num_topics):
+                for sent_ind in range(start_ends[topic_ind, 0] - 1, start_ends[topic_ind, 1]):
+                    topic_rep[batch_ind, sent_ind] = topic_mat[topic_ind]
+        topic_rep = torch.from_numpy(topic_rep)  # batch_size x seq_len x num_directions * hidden_size
         return sent_rep, doc_rep, topic_rep
-
-
-    def doc_encoder(self, sent_emb):
-        # TODO
-        pass
 
     def decoder(self, sent_rep, doc_rep, topic_rep):
         cat_doc_sent = torch.cat((doc_rep, sent_rep), 1)
