@@ -8,43 +8,45 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
-    def __init__(self, input_size, hidden_size, fc_num, gru_layers=1, glove_dir=None, word_dim=100):
+    def __init__(self, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
+        dropout=0.3, glove_dir="embeddings", trainable_embedding=True):
         super().__init__()
         # Used to save model hyperparamers
         self.config = {
-            # TODO
-            "hidden_size": hidden_size,
-            "word_dim": word_dim,
-            "trainable_embedding": True,
+            "embedding_size": embedding_size,
+            "gru_units": gru_units,
+            "gru_layers": gru_layers,
+            "glove_dir": glove_dir,
+            "trainable_embedding": trainable_embedding,
         }
-
         # Embedding layer
-        self.UNK = "UNK"
-        weight_matrix, word2idx = self.create_embeddings(glove_dir)
-        # num_embeddings, embedding_dim = weights_matrix.size()
-        self.embedding_layer = nn.Embedding(len(weight_matrix), self.config["trainable_embedding"])
-        self.embedding_layer.from_pretrained(torch.from_numpy(weight_matrix), freeze=self.config["trainable_embedding"])
-
+        weight_matrix, word2idx = self.create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
+        self.embedding_layer = nn.Embedding.from_pretrained(
+            torch.from_numpy(weight_matrix),
+            freeze=trainable_embedding,
+        )
         # Bidirectional GRU layer
         self.bi_gru = nn.GRU(
-            input_size,
-            hidden_size,
-            gru_layers,
+            input_size=embedding_size,
+            hidden_size=gru_units,
+            num_layers=gru_layers,
             batch_first=True,
-            bidirectional=True
+            bidirectional=True,
         )
-        # Attention-related parameters
-        self.v_attention = ...
-        self.W_attention = ...
+        # Attention-related parameters (*4 because we use concatenated representations, each being 2)
+        self.v_attention = nn.Parameter(torch.randn(gru_units * 4, 1))
+        self.W_attention = nn.Parameter(torch.randn(gru_units * 4, gru_units * 4))
         # Dense layer 1
         self.dense1 = nn.Linear(
-            ...,
+            in_features=gru_units * 4,
+            out_features=dense_units,
         )
         # Dropout layer
-        self.dropout = nn.Dropout(...)
+        self.dropout = nn.Dropout(dropout)
         # Dense layer 2
         self.dense2 = nn.Linear(
-            ...,
+            in_features=dense_units,
+            out_features=1,
         )
         # Use GPU if available
         if torch.cuda.is_available():
@@ -59,8 +61,8 @@ class ExtSummModel(nn.Module):
         :param vocab: dict, the entire vocabulary from word to index, from train, test and eval set
         :return: embedding_matrix, word2idx
         """
-        word2idx = dict()
         idx = 0
+        word2idx = dict()
         embedding_matrix = []
 
         with open(glove_dir, "rb") as glove_in:
@@ -73,8 +75,8 @@ class ExtSummModel(nn.Module):
                 embedding_matrix.append(embedding)
 
         # last entry reserved for OoV words
-        embedding_matrix.append(np.random.normal(scale=0.6, size=(self.config["word_dim"],)))
-        word2idx[self.UNK] = idx
+        embedding_matrix.append(np.random.normal(scale=0.6, size=(self.config["embedding_size"],)))
+        word2idx["UNK"] = idx
         return embedding_matrix, word2idx
 
     def forward(self, documents, topic_start_ends):
@@ -125,26 +127,27 @@ class ExtSummModel(nn.Module):
         sent_rep = pad_gru_output  # batch_size x seq_len x num_directions * hidden_size
         batch_size, seq_len, twice_hidden_size = pad_gru_output.shape
 
-        # TODO: confirm hidden"s shape is batch_size x num_layers * num_directions x hidden_size
+        # TODO: confirm hidden's shape is batch_size x num_layers * num_directions x hidden_size
         doc_rep = hidden.view(batch_size, twice_hidden_size).expand(-1, seq_len, -1)
         topic_rep = np.zeros(pad_gru_output.shape)
-        hidden_size = self.config["hidden_size"]
+        hidden_size = self.config["gru_units"]
         # Pad zeros at the beginning and the end of hidden states
         pad_gru_output = F.pad(pad_gru_output, pad=(0, 0, 1, 1), mode="constant", value=0)
-        for batch_ind in range(batch_size):
-            start_ends = topic_start_ends[batch_ind]  # num_topics * 2
-            num_topics, _ = start_ends.shape
+        for batch_idx in range(batch_size):
+            starts = topic_start_ends[batch_idx, :, 0]
+            ends = topic_start_ends[batch_idx, :, 1]
+            num_topics = len(starts)
             topic_mat = np.zeros((num_topics, twice_hidden_size)) # num_topics x num_directions * hidden_size
-            for topic_ind in range(num_topics):
+            for topic_idx in range(num_topics):
                 # forward
-                topic_mat[topic_ind, :hidden_size] = pad_gru_output[batch_ind, start_ends[topic_ind+1, 1], :hidden_size] - \
-                                             pad_gru_output[batch_ind, start_ends[topic_ind, 1], :hidden_size]
+                topic_mat[topic_idx, :hidden_size] = pad_gru_output[batch_idx, ends[topic_idx+1], :hidden_size] - \
+                                             pad_gru_output[batch_idx, ends[topic_idx], :hidden_size]
                 # backward
-                topic_mat[topic_ind, hidden_size:] = pad_gru_output[batch_ind, start_ends[topic_ind, 0], hidden_size:] - \
-                                             pad_gru_output[batch_ind, start_ends[topic_ind+1, 0], hidden_size:]
-            for topic_ind in range(num_topics):
-                for sent_ind in range(start_ends[topic_ind, 0] - 1, start_ends[topic_ind, 1]):
-                    topic_rep[batch_ind, sent_ind] = topic_mat[topic_ind]
+                topic_mat[topic_idx, hidden_size:] = pad_gru_output[batch_idx, starts[topic_idx], hidden_size:] - \
+                                             pad_gru_output[batch_idx, starts[topic_idx+1], hidden_size:]
+            for topic_idx in range(num_topics):
+                for sent_idx in range(starts[topic_idx] - 1, ends[topic_idx]):
+                    topic_rep[batch_idx, sent_idx] = topic_mat[topic_idx]
         topic_rep = torch.from_numpy(topic_rep)  # batch_size x seq_len x num_directions * hidden_size
         return sent_rep, doc_rep, topic_rep
 
@@ -183,7 +186,8 @@ class ExtSummModel(nn.Module):
                 # True labels
                 batch_ys_tensor = torch.tensor(batch_ys).to(self.device)
                 # Calculate the loss
-                loss = loss_fn(log_softmax, batch_ys_tensor)
+                loss = loss_fn(logsigmoid, batch_ys_tensor)
+                predicted = torch.argmax(logsigmoid, dim=1)
                 accuracy = (predicted == batch_ys_tensor).sum().item() / len(batch_ys_tensor)
                 # Call `backward()` on `loss` for back-propagation to compute
                 # gradients w.r.t. model parameters
