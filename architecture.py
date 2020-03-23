@@ -77,7 +77,7 @@ class ExtSummModel(nn.Module):
         # last entry reserved for OoV words
         embedding_matrix.append(np.random.normal(scale=0.6, size=(self.config["embedding_size"],)))
         word2idx["UNK"] = idx
-        return embedding_matrix, word2idx
+        return np.asarray(embedding_matrix), word2idx
 
     def forward(self, documents, topic_start_ends):
         # packed_sent_embedds: batch_size x num_sent x num_word x sent_dim (list)
