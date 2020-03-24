@@ -1,6 +1,12 @@
 # Do not include large data files
 raw_data/
 
+# embeddings
+embeddings/
+
+# arxiv-dataset
+arxiv-dataset/
+
 ### PYTHON SPECIFIC GITIGNORE ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -145,6 +151,3 @@ cython_debug/
 # static files generated from Django application using `collectstatic`
 media
 static
-
-# arxiv-dataset
-arxiv-dataset/
