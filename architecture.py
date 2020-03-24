@@ -139,15 +139,16 @@ class ExtSummModel(nn.Module):
             topic_mat = np.zeros((num_topics, twice_hidden_size))  # num_topics x num_directions * hidden_size
             for topic_idx in range(num_topics):
                 # forward
-                topic_mat[topic_idx, :hidden_size] = pad_gru_output[batch_idx, ends[topic_idx+1], :hidden_size] - \
-                                             pad_gru_output[batch_idx, ends[topic_idx], :hidden_size]
+                topic_mat[topic_idx, :hidden_size] = pad_gru_output[batch_idx, ends[topic_idx], :hidden_size] - \
+                                                     pad_gru_output[batch_idx, starts[topic_idx] - 1, :hidden_size]
                 # backward
                 topic_mat[topic_idx, hidden_size:] = pad_gru_output[batch_idx, starts[topic_idx], hidden_size:] - \
-                                             pad_gru_output[batch_idx, starts[topic_idx+1], hidden_size:]
+                                                     pad_gru_output[batch_idx, ends[topic_idx] + 1, hidden_size:]
             for topic_idx in range(num_topics):
                 for sent_idx in range(starts[topic_idx] - 1, ends[topic_idx]):
                     topic_rep[batch_idx, sent_idx] = topic_mat[topic_idx]
-        topic_rep = torch.from_numpy(topic_rep)  # batch_size x seq_len x num_directions * hidden_size
+        topic_rep = torch.from_numpy(topic_rep).float().to(
+            self.device)  # batch_size x seq_len x num_directions * hidden_size
         return sent_rep, doc_rep, topic_rep
 
     def decoder(self, sent_rep, doc_rep, topic_rep):
@@ -240,8 +241,9 @@ def batch_iter(data, batch_size=32):
 def main():
     # Perform a forward cycle with fictitious data
     model = ExtSummModel()
-    example_doc = [] # TODO
-    model.forward(example_doc)
+    example_batch = [[[1, 2], [0, 7, 3], [5, 6, 7]], [[5, 3], [6, 7], [2], [3, 4, 5, 6]]]  # TODO
+    example_starts_ends = [np.array([[1, 2], [3, 3]]), np.array([[1, 1], [2, 3], [4, 4]])]
+    model.forward(example_batch, example_starts_ends)
 
 
 if __name__ == "__main__":
