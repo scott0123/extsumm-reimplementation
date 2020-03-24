@@ -152,15 +152,24 @@ class ExtSummModel(nn.Module):
         return sent_rep, doc_rep, topic_rep
 
     def decoder(self, sent_rep, doc_rep, topic_rep):
-        cat_doc_sent = torch.cat((doc_rep, sent_rep), 1)
-        cat_topic_sent = torch.cat((topic_rep, sent_rep), 1)
-        doc_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_doc_sent)))
-        topic_scores = torch.bmm(self.v_attention, torch.tanh(torch.bmm(self.W_attention, cat_topic_sent)))
-        sum_scores = doc_scores + topic_scores
-        doc_weights = doc_scores / sum_scores
-        topic_weights = topic_scores / sum_scores
-        context = torch.mm(doc_weights, doc_rep) + torch.mm(topic_weights, topic_rep)
-        input_ = torch.cat((sent_rep, context), 1)
+        # calculating (d:sr) and (l:sr)
+        cat_doc_sent = torch.cat((doc_rep, sent_rep), 2)
+        cat_topic_sent = torch.cat((topic_rep, sent_rep), 2)
+        # calculating Wa(d:sr) and Wa(l:sr)
+        W_ds_mult = torch.matmul(cat_doc_sent, self.W_attention)
+        W_ts_mult = torch.matmul(cat_topic_sent, self.W_attention)
+        # calculating score = v * tanh(...)
+        doc_scores = torch.matmul(torch.tanh(W_ds_mult), self.v_attention)
+        topic_scores = torch.matmul(torch.tanh(W_ts_mult), self.v_attention)
+        # calculating weight = score^d / (score^d + score^l)
+        # calculating weight = score^l / (score^d + score^l)
+        sum_scores = doc_scores + topic_scores # TODO: paper different from implementation
+        doc_weights = doc_scores / sum_scores # TODO: paper different from implementation
+        topic_weights = topic_scores / sum_scores # TODO: paper different from implementation
+        # calculating context = weight^d * d + weight^l * l
+        context = doc_weights * doc_rep + topic_weights * topic_rep
+        # calculating input = (sr:context)
+        input_ = torch.cat((sent_rep, context), 2)
         h = self.dense1(input_)
         h = F.relu(h)
         h = self.dropout(h)
@@ -244,6 +253,7 @@ def main():
     example_batch = [[[1, 2], [0, 7, 3], [5, 6, 7]], [[5, 3], [6, 7], [2], [3, 4, 5, 6]]]  # TODO
     example_starts_ends = [np.array([[1, 2], [3, 3]]), np.array([[1, 1], [2, 3], [4, 4]])]
     model.forward(example_batch, example_starts_ends)
+    print("Forward function complete")
 
 
 if __name__ == "__main__":
