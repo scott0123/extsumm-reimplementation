@@ -80,8 +80,8 @@ class ExtSummModel(nn.Module):
         return np.asarray(embedding_matrix), word2idx
 
     def forward(self, documents, topic_start_ends):
-        # packed_sent_embedds: batch_size x num_sent x num_word x sent_dim (list)
-        # topic_start_ends: batch_size x num_topics (varies) * 2, sentence indexes should start from 1 (list)
+        # packed_sent_embedds: batch_size x num_sent x num_word x sent_dim (list of list of list)
+        # topic_start_ends: batch_size x [num_topics x 2], sentence indexes should start from 1 (list of 2D np arrays)
 
         sent_encoded = self.sent_encoder(documents)   # (batch_size x num_sent x num_word x word_dim)
 
@@ -102,7 +102,7 @@ class ExtSummModel(nn.Module):
             avg_sent_vecs = []
             for sent in doc:
                 word_indices_tensor = torch.LongTensor(sent)
-                word_embedding_tensor = self.embedding_layer(word_indices_tensor)
+                word_embedding_tensor = self.embedding_layer(word_indices_tensor).float()
                 avg_sent_vec = torch.mean(word_embedding_tensor, dim=0)
                 avg_sent_vecs.append(avg_sent_vec)
             embeddings.append(torch.stack(avg_sent_vecs))
@@ -127,17 +127,16 @@ class ExtSummModel(nn.Module):
         sent_rep = pad_gru_output  # batch_size x seq_len x num_directions * hidden_size
         batch_size, seq_len, twice_hidden_size = pad_gru_output.shape
 
-        # TODO: confirm hidden's shape is batch_size x num_layers * num_directions x hidden_size
-        doc_rep = hidden.view(batch_size, twice_hidden_size).expand(-1, seq_len, -1)
+        doc_rep = hidden.view(batch_size, twice_hidden_size).expand(seq_len, -1, -1).transpose(1, 0)
         topic_rep = np.zeros(pad_gru_output.shape)
         hidden_size = self.config["gru_units"]
         # Pad zeros at the beginning and the end of hidden states
-        pad_gru_output = F.pad(pad_gru_output, pad=(0, 0, 1, 1), mode="constant", value=0)
+        pad_gru_output = F.pad(pad_gru_output, pad=(0, 0, 1, 1), mode="constant", value=0).detach().numpy()
         for batch_idx in range(batch_size):
-            starts = topic_start_ends[batch_idx, :, 0]
-            ends = topic_start_ends[batch_idx, :, 1]
+            starts = topic_start_ends[batch_idx][:, 0]
+            ends = topic_start_ends[batch_idx][:, 1]
             num_topics = len(starts)
-            topic_mat = np.zeros((num_topics, twice_hidden_size)) # num_topics x num_directions * hidden_size
+            topic_mat = np.zeros((num_topics, twice_hidden_size))  # num_topics x num_directions * hidden_size
             for topic_idx in range(num_topics):
                 # forward
                 topic_mat[topic_idx, :hidden_size] = pad_gru_output[batch_idx, ends[topic_idx+1], :hidden_size] - \
