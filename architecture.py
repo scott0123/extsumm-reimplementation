@@ -192,7 +192,7 @@ class ExtSummModel(nn.Module):
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.convert_word_to_idx(Xs)        # convert word to its index
         for epoch in range(epochs):
-            Xs_batch_iter = batch_iter(Xs, batch_size=batch_size, shuffle=True)
+            Xs_batch_iter = batch_generator(Xs, batch_size=batch_size, shuffle=True)
             # ys_batch_iter = batch_iter(ys, batch_size=batch_size)
 
             # Iterate over mini-batches for the current epoch
