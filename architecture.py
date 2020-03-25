@@ -4,12 +4,15 @@ from torch import nn
 from torch.nn import functional as F
 import numpy as np
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
+from os import listdir
+from os.path import isfile, join
+import json
 
 
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
     def __init__(self, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
-        dropout=0.3, glove_dir="embeddings", trainable_embedding=True):
+                 dropout=0.3, glove_dir="embeddings", trainable_embedding=True):
         super().__init__()
         # Used to save model hyperparamers
         self.config = {
@@ -20,9 +23,9 @@ class ExtSummModel(nn.Module):
             "trainable_embedding": trainable_embedding,
         }
         # Embedding layer
-        weight_matrix, word2idx = self.create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
+        self.weight_matrix, self.word2idx = self.create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
         self.embedding_layer = nn.Embedding.from_pretrained(
-            torch.from_numpy(weight_matrix),
+            torch.from_numpy(self.weight_matrix),
             freeze=trainable_embedding,
         )
         # Bidirectional GRU layer
@@ -80,7 +83,7 @@ class ExtSummModel(nn.Module):
         return np.asarray(embedding_matrix), word2idx
 
     def forward(self, documents, topic_start_ends):
-        # packed_sent_embedds: batch_size x num_sent x num_word x sent_dim (list of list of list)
+        # documents: batch_size x num_sent x num_word x sent_dim (list of list of list)
         # topic_start_ends: batch_size x [num_topics x 2], sentence indexes should start from 1 (list of 2D np arrays)
 
         sent_encoded = self.sent_encoder(documents)   # (batch_size x num_sent x num_word x word_dim)
@@ -177,20 +180,29 @@ class ExtSummModel(nn.Module):
         logits = self.dense2(h)
         return logits
 
+    def convert_word_to_idx(self, data):
+        for doc, start_end, abstract, label in data:
+            for i, sentence in enumerate(doc):
+                # convert all the words to its corresponding indices. If UNK, assign to the last entry
+                doc[i] = [self.word2idx[word] if word in self.word2idx else len(self.word2idx) - 1
+                          for word in sentence]
 
-    def fit(self, Xs, ys, lr, epochs, batch_size=32):
+    def fit(self, Xs, lr, epochs, batch_size=32):
         self.train()
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         loss_fn = nn.NLLLoss()
+        self.convert_word_to_idx(Xs)        # convert word to its index
         for epoch in range(epochs):
             Xs_batch_iter = batch_iter(Xs, batch_size=batch_size)
-            ys_batch_iter = batch_iter(ys, batch_size=batch_size)
+            # ys_batch_iter = batch_iter(ys, batch_size=batch_size)
+
             # Iterate over mini-batches for the current epoch
-            for batch, (batch_Xs, batch_ys) in enumerate(zip(Xs_batch_iter, ys_batch_iter)):
+            for batch, batch_Xs in enumerate(Xs_batch_iter):
+                docs, start_ends, abstracts, labels = zip(*batch_Xs)
                 # Clear the gradients of parameters
                 optimizer.zero_grad()
                 # Perform forward pass to get neural network output
-                logits = self.forward(batch_Xs).to(self.device)
+                logits = self.forward(docs, start_ends).to(self.device)
                 logsigmoid = F.logsigmoid(logits)
                 # True labels
                 batch_ys_tensor = torch.tensor(batch_ys).to(self.device)
@@ -204,15 +216,15 @@ class ExtSummModel(nn.Module):
                 # Perform one step of parameter update using the newly-computed gradients
                 optimizer.step()
                 print(f"Epoch {epoch+1}, batch {batch+1}, loss={loss.item():.4f}, acc={accuracy:.4f}")
-    
 
     def predict(self, Xs):
         self.eval()
-        logits = self.forward(Xs)
+        self.convert_word_to_idx(Xs)
+        docs, start_ends, abstracts, labels = zip(*Xs)
+        logits = self.forward(docs, start_ends)
         confidence = F.sigmoid(logits)
         # TODO
         return confidence.numpy()
-
 
     def save(self, model_path):
         model_state = {
@@ -220,7 +232,6 @@ class ExtSummModel(nn.Module):
             "config":  self.config
         }
         torch.save(model_state, model_path)
-
 
     @classmethod
     def load(cls, model_path):
@@ -247,13 +258,67 @@ def batch_iter(data, batch_size=32):
         yield batch_examples
 
 
-def main():
-    # Perform a forward cycle with fictitious data
+def load_data(data_paths, data_type="train"):
+    doc_path, abstract_path, labels_path = data_paths
+    docs = []
+    start_ends = []
+    abstracts = []
+    labels = []
+
+    # actual inputs
+    doc_path = join(doc_path + data_type)
+    for file in listdir(doc_path):
+        with open(join(doc_path, file), 'r') as doc_in:
+            doc_json = json.load(doc_in)
+            one_doc = []
+            for sentence in doc_json['inputs']:
+                one_doc.append(sentence['tokens'])
+            docs.append(one_doc)
+            section_start = 1
+            sections = []
+            for section_len in doc_json['section_lengths']:
+                sections.append([section_start, section_start + section_len - 1])
+                section_start += section_len
+            start_ends.append(sections)
+
+    # abstracts
+    abstract_path = join(abstract_path + data_type)
+    for file in listdir(abstract_path):
+        with open(join(abstract_path, file), 'r') as abstract_in:
+            for line in abstract_in.read().splitlines():
+                abstracts.append(line)  # should only have 1 line
+
+    # labels
+    labels_path = join(labels_path + data_type)
+    for file in listdir(labels_path):
+        with open(join(labels_path, file), 'r') as labels_in:
+            labels_json = json.load(labels_in)
+            labels.append(labels_json['labels'])
+    return [(doc, start_end, abstract, label) for (doc, start_end, abstract, label)
+            in zip(docs, start_ends, abstracts, labels)]
+
+
+def test_forward():
     model = ExtSummModel()
     example_batch = [[[1, 2], [0, 7, 3], [5, 6, 7]], [[5, 3], [6, 7], [2], [3, 4, 5, 6]]]  # TODO
     example_starts_ends = [np.array([[1, 2], [3, 3]]), np.array([[1, 1], [2, 3], [4, 4]])]
     model.forward(example_batch, example_starts_ends)
     print("Forward function complete")
+
+
+def main():
+    # Perform a forward cycle with fictitious data
+    model = ExtSummModel()
+    data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
+
+    # [(doc, start_end, abstract, label)]
+    train_set = load_data(data_paths, data_type="train")
+    test_set = load_data(data_paths, data_type="test")
+    val_set = load_data(data_paths, data_type="val")
+
+    # model.fit(train_set, 0.001, 50)
+
+    # TODO: Shuffle the data
 
 
 if __name__ == "__main__":

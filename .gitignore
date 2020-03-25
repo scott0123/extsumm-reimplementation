@@ -1,5 +1,10 @@
 # Do not include large data files
 raw_data/
+arxiv/
+preprocessed/
+test_preprocessing/
+.idea/
+.DS_STORE
 
 # embeddings
 embeddings/
