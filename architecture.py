@@ -269,7 +269,6 @@ def load_data(data_paths, data_type="train"):
 
     # actual inputs
     doc_path = os.path.join(doc_path + data_type)
-    i = 0
     for file in os.listdir(doc_path):
         with open(os.path.join(doc_path, file), 'r') as doc_in:
             doc_json = json.load(doc_in)
@@ -286,7 +285,6 @@ def load_data(data_paths, data_type="train"):
 
     # abstracts
     abstract_path = os.path.join(abstract_path + data_type)
-    i = 0
     for file in os.listdir(abstract_path):
         with open(os.path.join(abstract_path, file), 'r') as abstract_in:
             for line in abstract_in.read().splitlines():
@@ -294,7 +292,6 @@ def load_data(data_paths, data_type="train"):
 
     # labels
     labels_path = os.path.join(labels_path + data_type)
-    i = 0
     for file in os.listdir(labels_path):
         with open(os.path.join(labels_path, file), 'r') as labels_in:
             labels_json = json.load(labels_in)
