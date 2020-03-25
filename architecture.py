@@ -204,7 +204,7 @@ class ExtSummModel(nn.Module):
                 logits = self.forward(docs, start_ends).to(self.device)
                 logsigmoid = F.logsigmoid(logits)
                 # True labels
-                batch_ys_tensor = torch.tensor(batch_ys).to(self.device)
+                batch_ys_tensor = torch.tensor(labels).to(self.device)
                 # Calculate the loss
                 loss = loss_fn(logsigmoid, batch_ys_tensor)
                 predicted = torch.argmax(logsigmoid, dim=1)
