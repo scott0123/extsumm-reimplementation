@@ -192,12 +192,10 @@ class ExtSummModel(nn.Module):
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.convert_word_to_idx(Xs)        # convert word to its index
         for epoch in range(epochs):
-            Xs_batch_iter = batch_generator(Xs, batch_size=batch_size, shuffle=True)
-            # ys_batch_iter = batch_iter(ys, batch_size=batch_size)
-
+            batch_Xs_generator = batch_generator(Xs, batch_size=batch_size, shuffle=True)
             # Iterate over mini-batches for the current epoch
-            for batch, batch_Xs in enumerate(Xs_batch_iter):
-                docs, start_ends, abstracts, labels = zip(*batch_Xs)
+            for batch, batch_Xs in enumerate(batch_Xs_generator):
+                docs, start_ends, abstracts, labels = batch_Xs
                 # Clear the gradients of parameters
                 optimizer.zero_grad()
                 # Perform forward pass to get neural network output
