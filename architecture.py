@@ -1,12 +1,12 @@
 # Import statements
 import os
 import json
+import rouge
 import torch
 import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
-import rouge
 
 
 # The Extractive Summarization Model, re-implemented
@@ -192,7 +192,7 @@ class ExtSummModel(nn.Module):
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.convert_word_to_idx(Xs)        # convert word to its index
         for epoch in range(epochs):
-            Xs_batch_iter = batch_iter(Xs, batch_size=batch_size)
+            Xs_batch_iter = batch_iter(Xs, batch_size=batch_size, shuffle=True)
             # ys_batch_iter = batch_iter(ys, batch_size=batch_size)
 
             # Iterate over mini-batches for the current epoch
@@ -250,13 +250,15 @@ class ExtSummModel(nn.Module):
         return model
 
 
-# taken from 01-intro-ner-pytorch/ner.py
-def batch_iter(data, batch_size=32):
-    batch_num = int(np.ceil(len(data) / batch_size))
-    index_array = list(range(len(data)))
+# taken from 01-intro-ner-pytorch/ner.py and modified
+def batch_generator(*data, batch_size=32, shuffle=True):
+    batch_num = int(np.ceil(len(data[0]) / batch_size))
+    index_array = list(range(len(data[0])))
+    if shuffle:
+        np.random.shuffle(index_array)
     for i in range(batch_num):
         indices = index_array[i * batch_size: (i + 1) * batch_size]
-        batch_examples = [data[idx] for idx in indices]
+        batch_examples = tuple([item[idx] for idx in indices] for item in data)
         yield batch_examples
 
 
