@@ -1,32 +1,32 @@
 # Import statements
+import os
+import json
 import torch
+import numpy as np
 from torch import nn
 from torch.nn import functional as F
-import numpy as np
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
-from os import listdir
-from os.path import isfile, join
-import json
 
 
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
     def __init__(self, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
-                 dropout=0.3, glove_dir="embeddings", trainable_embedding=True):
+                 dropout=0.3, glove_dir="embeddings", freeze_embedding=True):
         super().__init__()
+        weight_matrix, word2idx = self.create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", embedding_size)
         # Used to save model hyperparamers
         self.config = {
             "embedding_size": embedding_size,
             "gru_units": gru_units,
             "gru_layers": gru_layers,
             "glove_dir": glove_dir,
-            "trainable_embedding": trainable_embedding,
+            "freeze_embedding": freeze_embedding,
+            "word2idx": word2idx,
         }
         # Embedding layer
-        self.weight_matrix, self.word2idx = self.create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
         self.embedding_layer = nn.Embedding.from_pretrained(
-            torch.from_numpy(self.weight_matrix),
-            freeze=trainable_embedding,
+            torch.from_numpy(weight_matrix),
+            freeze=freeze_embedding,
         )
         # Bidirectional GRU layer
         self.bi_gru = nn.GRU(
@@ -58,7 +58,7 @@ class ExtSummModel(nn.Module):
             self.device = torch.device("cpu")
         self.to(self.device)
 
-    def create_embeddings(self, glove_dir):
+    def create_embeddings(self, glove_dir, embedding_size):
         """
         :param glove_dir:
         :param vocab: dict, the entire vocabulary from word to index, from train, test and eval set
@@ -78,16 +78,14 @@ class ExtSummModel(nn.Module):
                 embedding_matrix.append(embedding)
 
         # last entry reserved for OoV words
-        embedding_matrix.append(np.random.normal(scale=0.6, size=(self.config["embedding_size"],)))
+        embedding_matrix.append(np.random.normal(scale=0.6, size=(embedding_size,)))
         word2idx["UNK"] = idx
         return np.asarray(embedding_matrix), word2idx
 
     def forward(self, documents, topic_start_ends):
         # documents: batch_size x num_sent x num_word x sent_dim (list of list of list)
         # topic_start_ends: batch_size x [num_topics x 2], sentence indexes should start from 1 (list of 2D np arrays)
-
         sent_encoded = self.sent_encoder(documents)   # (batch_size x num_sent x num_word x word_dim)
-
         # (batch_size x num_sent x num_word x word_dim) -> (batch_size x num_word x word_dim)
         sent_rep, doc_rep, topic_rep = self.doc_encoder(sent_encoded, topic_start_ends)
         logits = self.decoder(sent_rep, doc_rep, topic_rep)
@@ -181,10 +179,11 @@ class ExtSummModel(nn.Module):
         return logits
 
     def convert_word_to_idx(self, data):
+        word2idx = self.config["word2idx"]
         for doc, start_end, abstract, label in data:
             for i, sentence in enumerate(doc):
                 # convert all the words to its corresponding indices. If UNK, assign to the last entry
-                doc[i] = [self.word2idx[word] if word in self.word2idx else len(self.word2idx) - 1
+                doc[i] = [word2idx[word] if word in word2idx else len(word2idx) - 1
                           for word in sentence]
 
     def fit(self, Xs, lr, epochs, batch_size=32):
@@ -266,9 +265,9 @@ def load_data(data_paths, data_type="train"):
     labels = []
 
     # actual inputs
-    doc_path = join(doc_path + data_type)
-    for file in listdir(doc_path):
-        with open(join(doc_path, file), 'r') as doc_in:
+    doc_path = os.path.join(doc_path + data_type)
+    for file in os.listdir(doc_path):
+        with open(os.path.join(doc_path, file), 'r') as doc_in:
             doc_json = json.load(doc_in)
             one_doc = []
             for sentence in doc_json['inputs']:
@@ -282,16 +281,16 @@ def load_data(data_paths, data_type="train"):
             start_ends.append(sections)
 
     # abstracts
-    abstract_path = join(abstract_path + data_type)
-    for file in listdir(abstract_path):
-        with open(join(abstract_path, file), 'r') as abstract_in:
+    abstract_path = os.path.join(abstract_path + data_type)
+    for file in os.listdir(abstract_path):
+        with open(os.path.join(abstract_path, file), 'r') as abstract_in:
             for line in abstract_in.read().splitlines():
                 abstracts.append(line)  # should only have 1 line
 
     # labels
-    labels_path = join(labels_path + data_type)
-    for file in listdir(labels_path):
-        with open(join(labels_path, file), 'r') as labels_in:
+    labels_path = os.path.join(labels_path + data_type)
+    for file in os.listdir(labels_path):
+        with open(os.path.join(labels_path, file), 'r') as labels_in:
             labels_json = json.load(labels_in)
             labels.append(labels_json['labels'])
     return [(doc, start_end, abstract, label) for (doc, start_end, abstract, label)
@@ -306,7 +305,7 @@ def test_forward():
     print("Forward function complete")
 
 
-def main():
+def test_with_data():
     # Perform a forward cycle with fictitious data
     model = ExtSummModel()
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
@@ -319,6 +318,10 @@ def main():
     # model.fit(train_set, 0.001, 50)
 
     # TODO: Shuffle the data
+
+
+def main():
+    test_with_data()
 
 
 if __name__ == "__main__":
