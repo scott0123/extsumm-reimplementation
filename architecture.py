@@ -175,7 +175,7 @@ class ExtSummModel(nn.Module):
         h = F.relu(h)
         h = self.dropout(h)
         # final part altered to use logits for computational stability
-        logits = self.dense2(h)
+        logits = self.dense2(h).squeeze(2)
         return logits
 
     def convert_word_to_idx(self, data):
@@ -189,7 +189,6 @@ class ExtSummModel(nn.Module):
     def fit(self, Xs, lr, epochs, batch_size=32):
         self.train()
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-        loss_fn = nn.NLLLoss()
         self.convert_word_to_idx(Xs)        # convert word to its index
         for epoch in range(epochs):
             Xs_batch_iter = batch_iter(Xs, batch_size=batch_size)
@@ -202,13 +201,17 @@ class ExtSummModel(nn.Module):
                 optimizer.zero_grad()
                 # Perform forward pass to get neural network output
                 logits = self.forward(docs, start_ends).to(self.device)
-                logsigmoid = F.logsigmoid(logits)
                 # True labels
-                batch_ys_tensor = torch.tensor(labels).to(self.device)
+                batch_ys = []
+                for label in labels:
+                    batch_ys.append(torch.FloatTensor(label))
+                batch_ys_tensor = pad_sequence(batch_ys, padding_value=-1).permute(1, 0).to(self.device)
+                label_mask = batch_ys_tensor.gt(-1).float()
                 # Calculate the loss
-                loss = loss_fn(logsigmoid, batch_ys_tensor)
-                predicted = torch.argmax(logsigmoid, dim=1)
-                accuracy = (predicted == batch_ys_tensor).sum().item() / len(batch_ys_tensor)
+                loss = F.binary_cross_entropy_with_logits(logits, batch_ys_tensor, weight=label_mask)
+                probas = torch.sigmoid(logits)
+                predicted = (probas > 0.5).float()
+                accuracy = (predicted == batch_ys_tensor).sum().item() / batch_ys_tensor.numel()
                 # Call `backward()` on `loss` for back-propagation to compute
                 # gradients w.r.t. model parameters
                 loss.backward()
@@ -315,7 +318,7 @@ def test_with_data():
     test_set = load_data(data_paths, data_type="test")
     val_set = load_data(data_paths, data_type="val")
 
-    # model.fit(train_set, 0.001, 50)
+    model.fit(train_set, 0.001, 50)
 
     # TODO: Shuffle the data
 
