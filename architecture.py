@@ -1,12 +1,12 @@
 # Import statements
 import os
 import json
+import rouge
 import torch
 import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_sequence
-import rouge
 
 
 # The Extractive Summarization Model, re-implemented
@@ -181,7 +181,7 @@ class ExtSummModel(nn.Module):
 
     def convert_word_to_idx(self, data):
         word2idx = self.config["word2idx"]
-        for doc, start_end, abstract, label in data:
+        for doc, start_end, abstract, label in zip(*data):
             for i, sentence in enumerate(doc):
                 # convert all the words to its corresponding indices. If UNK, assign to the last entry
                 doc[i] = [word2idx[word] if word in word2idx else len(word2idx) - 1
@@ -192,12 +192,10 @@ class ExtSummModel(nn.Module):
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.convert_word_to_idx(Xs)        # convert word to its index
         for epoch in range(epochs):
-            Xs_batch_iter = batch_iter(Xs, batch_size=batch_size)
-            # ys_batch_iter = batch_iter(ys, batch_size=batch_size)
-
+            batch_Xs_generator = batch_generator(*Xs, batch_size=batch_size, shuffle=True)
             # Iterate over mini-batches for the current epoch
-            for batch, batch_Xs in enumerate(Xs_batch_iter):
-                docs, start_ends, abstracts, labels = zip(*batch_Xs)
+            for batch, batch_Xs in enumerate(batch_Xs_generator):
+                docs, start_ends, abstracts, labels = batch_Xs
                 # Clear the gradients of parameters
                 optimizer.zero_grad()
                 # Perform forward pass to get neural network output
@@ -250,13 +248,15 @@ class ExtSummModel(nn.Module):
         return model
 
 
-# taken from 01-intro-ner-pytorch/ner.py
-def batch_iter(data, batch_size=32):
-    batch_num = int(np.ceil(len(data) / batch_size))
-    index_array = list(range(len(data)))
+# taken from 01-intro-ner-pytorch/ner.py and modified
+def batch_generator(*data, batch_size=32, shuffle=True):
+    batch_num = int(np.ceil(len(data[0]) / batch_size))
+    index_array = list(range(len(data[0])))
+    if shuffle:
+        np.random.shuffle(index_array)
     for i in range(batch_num):
         indices = index_array[i * batch_size: (i + 1) * batch_size]
-        batch_examples = [data[idx] for idx in indices]
+        batch_examples = tuple([item[idx] for idx in indices] for item in data)
         yield batch_examples
 
 
@@ -296,8 +296,7 @@ def load_data(data_paths, data_type="train"):
         with open(os.path.join(labels_path, file), 'r') as labels_in:
             labels_json = json.load(labels_in)
             labels.append(labels_json['labels'])
-    return [(doc, start_end, abstract, label) for (doc, start_end, abstract, label)
-            in zip(docs, start_ends, abstracts, labels)]
+    return (docs, start_ends, abstracts, labels)
 
 
 # code used from https://pypi.org/project/py-rouge/
@@ -348,14 +347,12 @@ def test_with_data():
     model = ExtSummModel()
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
 
-    # [(doc, start_end, abstract, label)]
+    # (doc, start_end, abstract, label)
     train_set = load_data(data_paths, data_type="train")
     test_set = load_data(data_paths, data_type="test")
     val_set = load_data(data_paths, data_type="val")
 
-    model.fit(train_set, 0.001, 50)
-
-    # TODO: Shuffle the data
+    model.fit(train_set, lr=0.001, epochs=50, batch_size=128)
 
 
 def test_rouge():
@@ -365,8 +362,8 @@ def test_rouge():
 
 
 def main():
-    # test_with_data()
-    test_rouge()
+    test_with_data()
+    #test_rouge()
 
 
 if __name__ == "__main__":
