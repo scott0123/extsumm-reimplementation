@@ -13,7 +13,7 @@ class ExtSummModel(nn.Module):
     def __init__(self, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
                  dropout=0.3, glove_dir="embeddings", freeze_embedding=True):
         super().__init__()
-        weight_matrix, word2idx = self.create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
+        weight_matrix, word2idx = self.create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", embedding_size)
         # Used to save model hyperparamers
         self.config = {
             "embedding_size": embedding_size,
@@ -58,7 +58,7 @@ class ExtSummModel(nn.Module):
             self.device = torch.device("cpu")
         self.to(self.device)
 
-    def create_embeddings(self, glove_dir):
+    def create_embeddings(self, glove_dir, embedding_size):
         """
         :param glove_dir:
         :param vocab: dict, the entire vocabulary from word to index, from train, test and eval set
@@ -78,7 +78,7 @@ class ExtSummModel(nn.Module):
                 embedding_matrix.append(embedding)
 
         # last entry reserved for OoV words
-        embedding_matrix.append(np.random.normal(scale=0.6, size=(self.config["embedding_size"],)))
+        embedding_matrix.append(np.random.normal(scale=0.6, size=(embedding_size,)))
         word2idx["UNK"] = idx
         return np.asarray(embedding_matrix), word2idx
 
@@ -321,7 +321,7 @@ def test_with_data():
 
 
 def main():
-    test_forward()
+    test_with_data()
 
 
 if __name__ == "__main__":
