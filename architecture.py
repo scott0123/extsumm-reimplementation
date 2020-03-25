@@ -278,7 +278,7 @@ def load_data(data_paths, data_type="train"):
             for section_len in doc_json['section_lengths']:
                 sections.append([section_start, section_start + section_len - 1])
                 section_start += section_len
-            start_ends.append(sections)
+            start_ends.append(np.array(sections))
 
     # abstracts
     abstract_path = os.path.join(abstract_path + data_type)
