@@ -103,11 +103,11 @@ class ExtSummModel(nn.Module):
             # all average sentence vectors in the document
             avg_sent_vecs = []
             for sent in doc:
-                word_indices_tensor = torch.LongTensor(sent)
+                word_indices_tensor = torch.LongTensor(sent).to(self.device)
                 word_embedding_tensor = self.embedding_layer(word_indices_tensor).float()
                 avg_sent_vec = torch.mean(word_embedding_tensor, dim=0)
                 avg_sent_vecs.append(avg_sent_vec)
-            embeddings.append(torch.stack(avg_sent_vecs))
+            embeddings.append(torch.stack(avg_sent_vecs).to(self.device)
             actual_lengths.append(len(doc))
 
         padded_embeddings = pad_sequence(
@@ -149,8 +149,8 @@ class ExtSummModel(nn.Module):
             for topic_idx in range(num_topics):
                 for sent_idx in range(starts[topic_idx] - 1, ends[topic_idx]):
                     topic_rep[batch_idx, sent_idx] = topic_mat[topic_idx]
-        topic_rep = torch.from_numpy(topic_rep).float().to(
-            self.device)  # batch_size x seq_len x num_directions * hidden_size
+        # batch_size x seq_len x num_directions * hidden_size
+        topic_rep = torch.from_numpy(topic_rep).float().to(self.device)
         return sent_rep, doc_rep, topic_rep
 
     def decoder(self, sent_rep, doc_rep, topic_rep):
@@ -203,7 +203,7 @@ class ExtSummModel(nn.Module):
                 # True labels
                 batch_ys = []
                 for label in labels:
-                    batch_ys.append(torch.FloatTensor(label))
+                    batch_ys.append(torch.FloatTensor(label).to(self.device))
                 batch_ys_tensor = pad_sequence(batch_ys, padding_value=-1).permute(1, 0).to(self.device)
                 label_mask = batch_ys_tensor.gt(-1).float()
                 # Calculate the loss
