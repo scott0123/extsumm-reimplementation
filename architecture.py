@@ -208,15 +208,21 @@ class ExtSummModel(nn.Module):
                 label_mask = batch_ys_tensor.gt(-1).float()
                 # Calculate the loss
                 loss = F.binary_cross_entropy_with_logits(logits, batch_ys_tensor, weight=label_mask)
-                probas = torch.sigmoid(logits)
-                predicted = (probas > 0.5).float()
-                accuracy = (predicted == batch_ys_tensor).sum().item() / batch_ys_tensor.numel()
+                accuracy = self.calculate_accuracy(batch_ys_tensor, labels, logits)
                 # Call `backward()` on `loss` for back-propagation to compute
                 # gradients w.r.t. model parameters
                 loss.backward()
                 # Perform one step of parameter update using the newly-computed gradients
                 optimizer.step()
                 print(f"Epoch {epoch+1}, batch {batch+1}, loss={loss.item():.4f}, acc={accuracy:.4f}")
+
+    @staticmethod
+    def calculate_accuracy(batch_ys_tensor, labels, logits):
+        probas = torch.sigmoid(logits)
+        predicted = (probas > 0.5).float()
+        num_to_predict = sum([len(seq) for seq in labels])
+        accuracy = torch.sum(predicted == batch_ys_tensor).item() / num_to_predict
+        return accuracy
 
     def predict(self, Xs):
         self.eval()
