@@ -282,6 +282,8 @@ def load_data(data_paths, data_type="train"):
                 sections.append([section_start, section_start + section_len - 1])
                 section_start += section_len
             start_ends.append(np.array(sections))
+            if len(docs) == 100:
+                break
 
     # abstracts
     abstract_path = os.path.join(abstract_path + data_type)
@@ -289,6 +291,8 @@ def load_data(data_paths, data_type="train"):
         with open(os.path.join(abstract_path, file), 'r') as abstract_in:
             for line in abstract_in.read().splitlines():
                 abstracts.append(line)  # should only have 1 line
+            if len(abstracts) == 100:
+                break
 
     # labels
     labels_path = os.path.join(labels_path + data_type)
@@ -296,6 +300,8 @@ def load_data(data_paths, data_type="train"):
         with open(os.path.join(labels_path, file), 'r') as labels_in:
             labels_json = json.load(labels_in)
             labels.append(labels_json['labels'])
+            if len(labels) == 100:
+                break
     return [(doc, start_end, abstract, label) for (doc, start_end, abstract, label)
             in zip(docs, start_ends, abstracts, labels)]
 
