@@ -14,7 +14,11 @@ Reimplementation of the model as described in *Extractive Summarization of Long 
 
 ### Running the Model
 
-`#TODO`
+Train the model with `python3 train_model.py`
+
+Test the model with `python3 test_model.py`
+
+Evaluate the model with the ROUGE metrics with `python3 eval_rouge.py`
 
 ## ExtSumm model Resources
 

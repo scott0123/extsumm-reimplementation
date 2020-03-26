@@ -1,7 +1,4 @@
 # Import statements
-import os
-import json
-import rouge
 import torch
 import numpy as np
 from torch import nn
@@ -107,7 +104,7 @@ class ExtSummModel(nn.Module):
                 word_embedding_tensor = self.embedding_layer(word_indices_tensor).float()
                 avg_sent_vec = torch.mean(word_embedding_tensor, dim=0)
                 avg_sent_vecs.append(avg_sent_vec)
-            embeddings.append(torch.stack(avg_sent_vecs).to(self.device)
+            embeddings.append(torch.stack(avg_sent_vecs).to(self.device))
             actual_lengths.append(len(doc))
 
         padded_embeddings = pad_sequence(
@@ -227,10 +224,23 @@ class ExtSummModel(nn.Module):
     def predict(self, Xs):
         self.eval()
         self.convert_word_to_idx(Xs)
-        docs, start_ends, abstracts, labels = zip(*Xs)
+        docs, start_ends, abstracts, labels = Xs
         logits = self.forward(docs, start_ends)
-        confidence = F.sigmoid(logits)
+        confidence = F.sigmoid(logits) # FIXME this part is still wrong
         return (confidence.numpy() > 0.5).float()
+
+    def predict_and_eval(self, Xs):
+        self.eval()
+        self.convert_word_to_idx(Xs)
+        docs, start_ends, abstracts, labels = Xs
+        logits = self.forward(docs, start_ends).to(self.device)
+        ys = []
+        for label in labels:
+            ys.append(torch.FloatTensor(label).to(self.device))
+        ys_tensor = pad_sequence(ys, padding_value=-1).permute(1, 0).to(self.device)
+        label_mask = ys_tensor.gt(-1).float()
+        accuracy = self.calculate_accuracy(ys_tensor, labels, logits)
+        return accuracy
 
     def save(self, model_path):
         model_state = {
@@ -266,110 +276,16 @@ def batch_generator(*data, batch_size=32, shuffle=True):
         yield batch_examples
 
 
-def load_data(data_paths, data_type="train"):
-    doc_path, abstract_path, labels_path = data_paths
-    docs = []
-    start_ends = []
-    abstracts = []
-    labels = []
-
-    # actual inputs
-    doc_path = os.path.join(doc_path + data_type)
-    for file in os.listdir(doc_path):
-        with open(os.path.join(doc_path, file), 'r') as doc_in:
-            doc_json = json.load(doc_in)
-            one_doc = []
-            for sentence in doc_json['inputs']:
-                one_doc.append(sentence['tokens'])
-            docs.append(one_doc)
-            section_start = 1
-            sections = []
-            for section_len in doc_json['section_lengths']:
-                sections.append([section_start, section_start + section_len - 1])
-                section_start += section_len
-            start_ends.append(np.array(sections))
-
-    # abstracts
-    abstract_path = os.path.join(abstract_path + data_type)
-    for file in os.listdir(abstract_path):
-        with open(os.path.join(abstract_path, file), 'r') as abstract_in:
-            for line in abstract_in.read().splitlines():
-                abstracts.append(line)  # should only have 1 line
-
-    # labels
-    labels_path = os.path.join(labels_path + data_type)
-    for file in os.listdir(labels_path):
-        with open(os.path.join(labels_path, file), 'r') as labels_in:
-            labels_json = json.load(labels_in)
-            labels.append(labels_json['labels'])
-    return (docs, start_ends, abstracts, labels)
-
-
-# code used from https://pypi.org/project/py-rouge/
-def prepare_results(metric, p, r, f):
-    return '\t{}:\t{}: {:5.2f}\t{}: {:5.2f}\t{}: {:5.2f}'\
-        .format(metric, 'P', 100.0 * p, 'R', 100.0 * r, 'F1', 100.0 * f)
-
-
-def print_rouge(model_path, data):
-    # get the hypothesis text
-    model = ExtSummModel.load(model_path)
-    predictions = model.predict(data)
-    docs, start_ends, abstracts, labels = zip(*data)
-    hypothesis = []
-    for doc in docs:
-        temp_hyp = []
-        for i, sentence, in enumerate(doc):
-            if predictions[i] == 1:
-                temp_hyp.append(' '.join(sentence))
-        hypothesis.append(' '.join(temp_hyp))
-
-    # set up rouge evaluator
-    evaluator = rouge.Rouge(metrics=['rouge-n', 'rouge-l', 'rouge-w'],
-                            max_n=4,
-                            limit_length=True,
-                            length_limit=200,
-                            length_limit_type='words',
-                            apply_avg=True,
-                            apply_best=False,
-                            alpha=0.5,  # Default F1_score
-                            weight_factor=1.2,
-                            stemming=True)
-    scores = evaluator.get_scores(hypothesis, list(abstracts))
-    for metric, results in sorted(scores.items(), key=lambda x: x[0]):
-        print(prepare_results(metric, results['p'], results['r'], results['f']))
-
-
 def test_forward():
     model = ExtSummModel()
-    example_batch = [[[1, 2], [0, 7, 3], [5, 6, 7]], [[5, 3], [6, 7], [2], [3, 4, 5, 6]]]  # TODO
+    example_batch = [[[1, 2], [0, 7, 3], [5, 6, 7]], [[5, 3], [6, 7], [2], [3, 4, 5, 6]]]
     example_starts_ends = [np.array([[1, 2], [3, 3]]), np.array([[1, 1], [2, 3], [4, 4]])]
     model.forward(example_batch, example_starts_ends)
     print("Forward function complete")
 
 
-def test_with_data():
-    # Perform a forward cycle with fictitious data
-    model = ExtSummModel()
-    data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
-
-    # (doc, start_end, abstract, label)
-    train_set = load_data(data_paths, data_type="train")
-    test_set = load_data(data_paths, data_type="test")
-    val_set = load_data(data_paths, data_type="val")
-
-    model.fit(train_set, lr=0.001, epochs=50, batch_size=128)
-
-
-def test_rouge():
-    data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
-    train_set = load_data(data_paths, data_type="train")
-    print_rouge("", train_set)
-
-
 def main():
-    test_with_data()
-    #test_rouge()
+    test_forward()
 
 
 if __name__ == "__main__":
