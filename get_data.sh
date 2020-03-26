@@ -18,6 +18,7 @@ rm "${filename}"
 # Step 4: Download the pre-trained GloVe word embeddings
 curl -L http://nlp.stanford.edu/data/glove.6B.zip -o glove.6B.zip
 
-# Step 5: unzip it, move it, and delete the zip file
-unzip "glove.6B.zip"
-mv glove.6B embeddings
+# Step 5: make the dir, unzip it to this dir, and delete the zip file
+mkdir embeddings
+unzip "glove.6B.zip" -d embeddings
+rm glove.6B.zip
