@@ -1,5 +1,6 @@
 import os
 import json
+import numpy as np
 from architecture import ExtSummModel
 
 def load_data(data_paths, data_type="train"):
