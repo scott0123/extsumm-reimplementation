@@ -210,7 +210,8 @@ class ExtSummModel(nn.Module):
                 loss = F.binary_cross_entropy_with_logits(logits, batch_ys_tensor, weight=label_mask)
                 probas = torch.sigmoid(logits)
                 predicted = (probas > 0.5).float()
-                accuracy = (predicted == batch_ys_tensor).sum().item() / batch_ys_tensor.numel()
+                num_to_predict = sum([len(seq) for seq in labels])
+                accuracy = (predicted == batch_ys_tensor).sum().item() / num_to_predict
                 # Call `backward()` on `loss` for back-propagation to compute
                 # gradients w.r.t. model parameters
                 loss.backward()
