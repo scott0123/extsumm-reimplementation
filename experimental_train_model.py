@@ -65,7 +65,7 @@ def train_model():
     print("Val set loaded. Length:", len(val_set[0]))
 
     # train the model
-    model.fit(val_set, lr=0.001, epochs=50, batch_size=128)
+    model.fit(val_set, lr=0.001, epochs=50, batch_size=32)
     # save the model
     curr_dir = os.path.dirname(os.path.realpath(__file__))
     model_dir = os.path.join(curr_dir, "model")

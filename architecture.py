@@ -165,8 +165,8 @@ class ExtSummModel(nn.Module):
         #sum_scores = doc_scores + topic_scores # TODO: paper different from implementation
         #doc_weights = doc_scores / sum_scores # TODO: paper different from implementation
         #topic_weights = topic_scores / sum_scores # TODO: paper different from implementation
-        doc_weights = F.softmax(doc_scores)
-        topic_weights = F.softmax(topic_scores)
+        doc_weights = F.softmax(doc_scores, dim=1)
+        topic_weights = F.softmax(topic_scores, dim=1)
         # calculating context = weight^d * d + weight^l * l
         context = doc_weights * doc_rep + topic_weights * topic_rep
         # calculating input = (sr:context)
@@ -188,7 +188,7 @@ class ExtSummModel(nn.Module):
 
     def fit(self, Xs, lr, epochs, batch_size=32):
         self.train()
-        neg_pos_ratio = self.config["neg_pos_ratio"]
+        neg_pos_ratio = torch.FloatTensor([self.config["neg_pos_ratio"]]).to(self.device)
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.convert_word_to_idx(Xs)        # convert word to its index
         for epoch in range(epochs):
@@ -211,7 +211,6 @@ class ExtSummModel(nn.Module):
                     logits,
                     batch_ys_tensor,
                     weight=label_mask,
-                    reduction="sum",
                     pos_weight=neg_pos_ratio,
                 )
                 accuracy = self.calculate_accuracy(batch_ys_tensor, labels, logits)
