@@ -93,14 +93,14 @@ def convert_idx_to_sent_embeddings(weight_matrix, docs):
             for j, word_index in enumerate(sentence):
                 if word_index >= 0:
                     word_embeddings.append(weight_matrix[word_index])
-            if len(word_embeddings) > 0:
+            if len(word_embeddings) > 0: # FIXME this line is problematic
                 word_embeddings = np.stack(word_embeddings)
                 # Average of word embeddings
                 sent_embeddings.append(np.mean(word_embeddings, axis=0))
         docs[k] = sent_embeddings
 
 
-def get_pos_ratio(labels):
+def get_ratio(labels):
     sampled = np.random.choice(len(labels), 50000, replace=False)
     pos = neg = 0.0
     for idx in sampled:
@@ -122,10 +122,10 @@ def convert_word_to_idx(word2idx, docs):
 
 
 def train_model():
-    # Perform a forward cycle with fictitious data
     glove_dir = "embeddings"
     embedding_size = 300
     weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
+    print("Created embeddings")
 
     # load data
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
@@ -138,16 +138,16 @@ def train_model():
     print("Train set loaded. Length:", len(train_set[0]))
 
     # compute positive-negative ratio
-    pos_ratio = get_pos_ratio(train_set[-1])
+    neg_pos_ratio = get_ratio(train_set[-1])
     print("Negative to positive ratio is ", pos_ratio)
 
     # initialize model
-    model = ExtSummModel(weight_matrix, neg_pos_ratio=pos_ratio)
+    model = ExtSummModel(weight_matrix, word2idx, neg_pos_ratio=neg_pos_ratio)
     print("Model initialization completed")
 
-    convert_idx_to_sent_embeddings(weight_matrix, train_set[0])
+    #convert_idx_to_sent_embeddings(weight_matrix, train_set[0])
     # train the model
-    model.fit(train_set, lr=0.001, epochs=50, batch_size=128)
+    model.fit(train_set, lr=0.0001, epochs=50, batch_size=32)
     # save the model
     curr_dir = os.path.dirname(os.path.realpath(__file__))
     model_dir = os.path.join(curr_dir, "model")

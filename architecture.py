@@ -13,6 +13,7 @@ class ExtSummModel(nn.Module):
         super().__init__()
         # Used to save model hyperparamers
         self.config = {
+            "word2idx": word2idx,
             "embedding_size": embedding_size,
             "gru_units": gru_units,
             "gru_layers": gru_layers,
