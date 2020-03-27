@@ -2,6 +2,7 @@ import os
 import json
 import pickle
 import numpy as np
+from collections import Counter
 from architecture import ExtSummModel
 
 
@@ -99,6 +100,16 @@ def convert_idx_to_sent_embeddings(weight_matrix, docs):
         docs[k] = sent_embeddings
 
 
+def get_pos_ratio(labels):
+    sampled = np.random.sample(labels, size=50000)
+    pos = neg = 0.0
+    for label in sampled:
+        counted = Counter(label['labels'])
+        pos += counted[1]
+        neg += counted[0]
+    return neg / pos
+
+
 def convert_word_to_idx(word2idx, docs):
     for doc in docs:
         for i, sentence in enumerate(doc):
@@ -116,11 +127,8 @@ def train_model():
     embedding_size = 300
     weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
 
-    model = ExtSummModel(weight_matrix)
-    print("Model initialization completed")
-
+    # load data
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
-
     # (doc, start_end, abstract, label)
     test_set = load_data(word2idx, data_paths, data_type="test")
     print("Test set loaded. Length:", len(test_set[0]))
@@ -129,6 +137,15 @@ def train_model():
     train_set = load_data(word2idx, data_paths, data_type="train")
     print("Train set loaded. Length:", len(train_set[0]))
 
+    # compute positive-negative ratio
+    pos_ratio = get_pos_ratio(train_set[-1])
+    print("Negative to positive ratio is ", pos_ratio)
+
+    # initialize model
+    model = ExtSummModel(weight_matrix, neg_pos_ratio=pos_ratio)
+    print("Model initialization completed")
+
+    convert_idx_to_sent_embeddings(weight_matrix, train_set[0])
     # train the model
     model.fit(train_set, lr=0.001, epochs=50, batch_size=128)
     # save the model
