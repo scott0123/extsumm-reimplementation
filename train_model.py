@@ -103,7 +103,11 @@ def convert_word_to_idx(word2idx, docs):
     for doc in docs:
         for i, sentence in enumerate(doc):
             # convert all the words to its corresponding indices. If UNK, skip the word
-            doc[i] = [word2idx[word] if word in word2idx else -1 for word in sentence]
+            word_indexes = []
+            for word in sentence:
+                if word in word2idx:
+                    word_indexes.append(word2idx[word])
+            doc[i] = word_indexes
 
 
 def train_model():
@@ -112,7 +116,7 @@ def train_model():
     embedding_size = 300
     weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
 
-    model = ExtSummModel()
+    model = ExtSummModel(weight_matrix)
     print("Model initialization completed")
 
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
@@ -125,7 +129,6 @@ def train_model():
     train_set = load_data(word2idx, data_paths, data_type="train")
     print("Train set loaded. Length:", len(train_set[0]))
 
-    convert_idx_to_sent_embeddings(weight_matrix, train_set[0])
     # train the model
     model.fit(train_set, lr=0.001, epochs=50, batch_size=128)
     # save the model
