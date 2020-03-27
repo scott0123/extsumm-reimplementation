@@ -13,9 +13,17 @@ def load_data(weight_matrix, word2idx, data_paths, data_type="train"):
     abstracts = []
     labels = []
 
+    processed_data_dir = os.path.join(cache_dir, data_type)
+    if not os.path.isdir(processed_data_dir):
+        os.makedirs(processed_data_dir)
+    processed_data_path = os.path.join(processed_data_dir, "data.txt")
+    if os.path.exists(processed_data_path):
+        with open(processed_data_path, "rb") as fp:  # Unpickling
+            data = pickle.load(fp)
+        return data
+
     # actual inputs
     doc_path = os.path.join(doc_path, data_type)
-    processed_data_path = os.path.join(cache_dir, data_type, "data.txt")
     if os.path.exists(processed_data_path):
         with open(processed_data_path, "rb") as fp:  # Unpickling
             data = pickle.load(fp)
@@ -54,9 +62,8 @@ def load_data(weight_matrix, word2idx, data_paths, data_type="train"):
     return docs, start_ends, abstracts, labels
 
 
-def create_embeddings(glove_dir, embedding_size):
+def create_embeddings(glove_dir):
     """
-    :param embedding_size:
     :param glove_dir:
     :return: embedding_matrix, word2idx
     """
@@ -97,7 +104,7 @@ def train_model():
     # Perform a forward cycle with fictitious data
     glove_dir = "embeddings"
     embedding_size = 300
-    weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", embedding_size)
+    weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
 
     model = ExtSummModel()
     print("Model initialization completed")
