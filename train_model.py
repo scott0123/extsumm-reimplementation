@@ -12,8 +12,8 @@ def load_data(data_paths, data_type="train"):
 
     # actual inputs
     doc_path = os.path.join(doc_path + data_type)
-    for file in os.listdir(doc_path):
-        with open(os.path.join(doc_path, file), 'r') as doc_in:
+    for file_ in os.listdir(doc_path):
+        with open(os.path.join(doc_path, file_), 'r') as doc_in:
             doc_json = json.load(doc_in)
             one_doc = []
             for sentence in doc_json['inputs']:
@@ -28,15 +28,15 @@ def load_data(data_paths, data_type="train"):
 
     # abstracts
     abstract_path = os.path.join(abstract_path + data_type)
-    for file in os.listdir(abstract_path):
-        with open(os.path.join(abstract_path, file), 'r') as abstract_in:
+    for file_ in os.listdir(abstract_path):
+        with open(os.path.join(abstract_path, file_), 'r') as abstract_in:
             for line in abstract_in.read().splitlines():
                 abstracts.append(line)  # should only have 1 line
 
     # labels
     labels_path = os.path.join(labels_path + data_type)
-    for file in os.listdir(labels_path):
-        with open(os.path.join(labels_path, file), 'r') as labels_in:
+    for file_ in os.listdir(labels_path):
+        with open(os.path.join(labels_path, file_), 'r') as labels_in:
             labels_json = json.load(labels_in)
             labels.append(labels_json['labels'])
     return (docs, start_ends, abstracts, labels)
@@ -45,12 +45,16 @@ def load_data(data_paths, data_type="train"):
 def train_model():
     # Perform a forward cycle with fictitious data
     model = ExtSummModel()
+    print("Model initialization completed")
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
 
     # (doc, start_end, abstract, label)
-    train_set = load_data(data_paths, data_type="train")
     test_set = load_data(data_paths, data_type="test")
+    print("Test set loaded. Length:", len(test_set[0]))
     val_set = load_data(data_paths, data_type="val")
+    print("Val set loaded. Length:", len(val_set[0]))
+    train_set = load_data(data_paths, data_type="train")
+    print("Train set loaded. Length:", len(train_set[0]))
 
     # train the model
     model.fit(train_set, lr=0.001, epochs=50, batch_size=128)
