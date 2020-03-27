@@ -9,7 +9,7 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
     def __init__(self, weight_matrix, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
-                 dropout=0.3, freeze_embedding=True):
+                 dropout=0.3, freeze_embedding=True, neg_pos_ratio=47):
         super().__init__()
         # Used to save model hyperparamers
         self.config = {
