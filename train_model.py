@@ -5,7 +5,7 @@ import numpy as np
 from architecture import ExtSummModel
 
 
-def load_data(word2idx, data_paths, data_type="train"):
+def load_data(weight_matrix, word2idx, data_paths, data_type="train"):
     cache_dir = "cache"
     doc_path, abstract_path, labels_path = data_paths
     docs = []
@@ -48,7 +48,7 @@ def load_data(word2idx, data_paths, data_type="train"):
         with open(os.path.join(labels_path, file_), 'r') as labels_in:
             labels_json = json.load(labels_in)
             labels.append(labels_json['labels'])
-    convert_word_to_idx(word2idx, docs)
+    convert_words_to_embeddings(weight_matrix, word2idx, docs)
     with open(processed_data_path, "wb") as fp:  # Pickling
         pickle.dump((docs, start_ends, abstracts, labels), fp)
     return docs, start_ends, abstracts, labels
@@ -56,15 +56,15 @@ def load_data(word2idx, data_paths, data_type="train"):
 
 def create_embeddings(glove_dir, embedding_size):
     """
+    :param embedding_size:
     :param glove_dir:
-    :param vocab: dict, the entire vocabulary from word to index, from train, test and eval set
     :return: embedding_matrix, word2idx
     """
     idx = 0
     word2idx = dict()
     embedding_matrix = []
 
-    with open(glove_dir, "rb") as glove_in:
+    with open(glove_dir, "r") as glove_in:
         for line in glove_in:
             line = line.split()
             word = line[0]
@@ -73,18 +73,24 @@ def create_embeddings(glove_dir, embedding_size):
             embedding = np.array(line[1:]).astype(np.float)
             embedding_matrix.append(embedding)
 
-    # last entry reserved for OoV words
-    embedding_matrix.append(np.random.normal(scale=0.6, size=(embedding_size,)))
-    word2idx["UNK"] = idx
     return np.asarray(embedding_matrix), word2idx
 
 
-def convert_word_to_idx(word2idx, data):
-    for doc, start_end, abstract, label in zip(*data):
+def convert_words_to_embeddings(weight_matrix, word2idx, docs):
+    for k, doc in enumerate(docs):
+        sent_embeddings = []
         for i, sentence in enumerate(doc):
-            # convert all the words to its corresponding indices. If UNK, assign to the last entry
-            doc[i] = [word2idx[word] if word in word2idx else len(word2idx) - 1
-                      for word in sentence]
+            word_embeddings = []
+            # convert all the words to its corresponding embeddings. If UNK, skip the word
+            for j, word in enumerate(sentence):
+                word_index = word2idx[word] if word in word2idx else -1
+                if word_index >= 0:
+                    word_embeddings.append(weight_matrix[word_index])
+            if len(word_embeddings) > 0:
+                word_embeddings = np.stack(word_embeddings)
+                # Average of word embeddings
+                sent_embeddings.append(np.mean(word_embeddings, axis=0))
+        docs[k] = sent_embeddings
 
 
 def train_model():
@@ -93,17 +99,17 @@ def train_model():
     embedding_size = 300
     weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", embedding_size)
 
-    model = ExtSummModel(weight_matrix)
+    model = ExtSummModel()
     print("Model initialization completed")
 
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
 
     # (doc, start_end, abstract, label)
-    test_set = load_data(word2idx, data_paths, data_type="test")
+    test_set = load_data(weight_matrix, word2idx, data_paths, data_type="test")
     print("Test set loaded. Length:", len(test_set[0]))
-    val_set = load_data(word2idx, data_paths, data_type="val")
+    val_set = load_data(weight_matrix, word2idx, data_paths, data_type="val")
     print("Val set loaded. Length:", len(val_set[0]))
-    train_set = load_data(word2idx, data_paths, data_type="train")
+    train_set = load_data(weight_matrix, word2idx, data_paths, data_type="train")
     print("Train set loaded. Length:", len(train_set[0]))
 
     # train the model

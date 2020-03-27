@@ -8,7 +8,7 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
-    def __init__(self, weight_matrix, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
+    def __init__(self, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
                  dropout=0.3, freeze_embedding=True):
         super().__init__()
         # Used to save model hyperparamers
@@ -18,11 +18,6 @@ class ExtSummModel(nn.Module):
             "gru_layers": gru_layers,
             "freeze_embedding": freeze_embedding,
         }
-        # Embedding layer
-        self.embedding_layer = nn.Embedding.from_pretrained(
-            torch.from_numpy(weight_matrix),
-            freeze=freeze_embedding,
-        )
         # Bidirectional GRU layer
         self.bi_gru = nn.GRU(
             input_size=embedding_size,
@@ -70,14 +65,7 @@ class ExtSummModel(nn.Module):
         actual_lengths = []
         embeddings = []
         for doc in documents:
-            # all average sentence vectors in the document
-            avg_sent_vecs = []
-            for sent in doc:
-                word_indices_tensor = torch.LongTensor(sent).to(self.device)
-                word_embedding_tensor = self.embedding_layer(word_indices_tensor).float()
-                avg_sent_vec = torch.mean(word_embedding_tensor, dim=0)
-                avg_sent_vecs.append(avg_sent_vec)
-            embeddings.append(torch.stack(avg_sent_vecs).to(self.device))
+            embeddings.append(torch.stack(doc).to(self.device))
             actual_lengths.append(len(doc))
 
         padded_embeddings = pad_sequence(
