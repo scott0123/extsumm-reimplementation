@@ -93,7 +93,7 @@ def train_model():
     embedding_size = 300
     weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", embedding_size)
 
-    model = ExtSummModel(weight_matrix, word2idx)
+    model = ExtSummModel(weight_matrix)
     print("Model initialization completed")
 
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
