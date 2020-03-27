@@ -101,10 +101,10 @@ def convert_idx_to_sent_embeddings(weight_matrix, docs):
 
 
 def get_pos_ratio(labels):
-    sampled = np.random.choice(labels, size=50000)
+    sampled = np.random.choice(len(labels), 50000, replace=False)
     pos = neg = 0.0
-    for label in sampled:
-        counted = Counter(label['labels'])
+    for idx in sampled:
+        counted = Counter(labels[idx])
         pos += counted[1]
         neg += counted[0]
     return neg / pos
