@@ -37,14 +37,14 @@ def load_data(word2idx, data_paths, data_type="train"):
 
     # abstracts
     abstract_path = os.path.join(abstract_path, data_type)
-    for file in os.listdir(abstract_path):
+    for file_ in os.listdir(abstract_path):
         with open(os.path.join(abstract_path, file_), 'r') as abstract_in:
             for line in abstract_in.read().splitlines():
                 abstracts.append(line)  # should only have 1 line
 
     # labels
     labels_path = os.path.join(labels_path, data_type)
-    for file in os.listdir(labels_path):
+    for file_ in os.listdir(labels_path):
         with open(os.path.join(labels_path, file_), 'r') as labels_in:
             labels_json = json.load(labels_in)
             labels.append(labels_json['labels'])
