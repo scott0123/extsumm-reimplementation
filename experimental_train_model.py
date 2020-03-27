@@ -61,11 +61,13 @@ def train_model():
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
 
     # (doc, start_end, abstract, label)
-    val_set = load_data(data_paths, data_type="val")
-    print("Val set loaded. Length:", len(val_set[0]))
+    #val_set = load_data(data_paths, data_type="val")
+    #print("Val set loaded. Length:", len(val_set[0]))
+    train_set = load_data(data_paths, data_type="train")
+    print("Train set loaded. Length:", len(train_set[0]))
 
     # train the model
-    model.fit(val_set, lr=0.001, epochs=50, batch_size=32)
+    model.fit(train_set, lr=0.001, epochs=50, batch_size=32)
     # save the model
     curr_dir = os.path.dirname(os.path.realpath(__file__))
     model_dir = os.path.join(curr_dir, "model")
