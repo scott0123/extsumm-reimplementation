@@ -65,7 +65,8 @@ class ExtSummModel(nn.Module):
         actual_lengths = []
         embeddings = []
         for doc in documents:
-            embeddings.append(torch.stack(doc).to(self.device))
+            doc_tensor = torch.FloatTensor(doc)
+            embeddings.append(doc_tensor)
             actual_lengths.append(len(doc))
 
         padded_embeddings = pad_sequence(
