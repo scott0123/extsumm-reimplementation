@@ -9,7 +9,7 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
     def __init__(self, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
-                 dropout=0.3, glove_dir="embeddings", freeze_embedding=True):
+                 dropout=0.3, glove_dir="embeddings", neg_pos_ratio=0.5, freeze_embedding=True):
         super().__init__()
         weight_matrix, word2idx = self.create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", embedding_size)
         # Used to save model hyperparamers
@@ -18,6 +18,7 @@ class ExtSummModel(nn.Module):
             "gru_units": gru_units,
             "gru_layers": gru_layers,
             "glove_dir": glove_dir,
+            "neg_pos_ratio": neg_pos_ratio,
             "freeze_embedding": freeze_embedding,
             "word2idx": word2idx,
         }
@@ -161,9 +162,11 @@ class ExtSummModel(nn.Module):
         topic_scores = torch.matmul(torch.tanh(W_ts_mult), self.v_attention)
         # calculating weight = score^d / (score^d + score^l)
         # calculating weight = score^l / (score^d + score^l)
-        sum_scores = doc_scores + topic_scores # TODO: paper different from implementation
-        doc_weights = doc_scores / sum_scores # TODO: paper different from implementation
-        topic_weights = topic_scores / sum_scores # TODO: paper different from implementation
+        #sum_scores = doc_scores + topic_scores # TODO: paper different from implementation
+        #doc_weights = doc_scores / sum_scores # TODO: paper different from implementation
+        #topic_weights = topic_scores / sum_scores # TODO: paper different from implementation
+        doc_weights = F.softmax(doc_scores)
+        topic_weights = F.softmax(topic_scores)
         # calculating context = weight^d * d + weight^l * l
         context = doc_weights * doc_rep + topic_weights * topic_rep
         # calculating input = (sr:context)
@@ -185,6 +188,7 @@ class ExtSummModel(nn.Module):
 
     def fit(self, Xs, lr, epochs, batch_size=32):
         self.train()
+        neg_pos_ratio = self.config["neg_pos_ratio"]
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.convert_word_to_idx(Xs)        # convert word to its index
         for epoch in range(epochs):
@@ -203,7 +207,13 @@ class ExtSummModel(nn.Module):
                 batch_ys_tensor = pad_sequence(batch_ys, padding_value=-1).permute(1, 0).to(self.device)
                 label_mask = batch_ys_tensor.gt(-1).float()
                 # Calculate the loss
-                loss = F.binary_cross_entropy_with_logits(logits, batch_ys_tensor, weight=label_mask)
+                loss = F.binary_cross_entropy_with_logits(
+                    logits,
+                    batch_ys_tensor,
+                    weight=label_mask,
+                    reduction="sum",
+                    pos_weight=neg_pos_ratio,
+                )
                 accuracy = self.calculate_accuracy(batch_ys_tensor, labels, logits)
                 # Call `backward()` on `loss` for back-propagation to compute
                 # gradients w.r.t. model parameters
