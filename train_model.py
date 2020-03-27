@@ -142,7 +142,7 @@ def train_model():
     print("Negative to positive ratio is ", neg_pos_ratio)
 
     # initialize model
-    model = ExtSummModel(weight_matrix, word2idx, neg_pos_ratio=neg_pos_ratio)
+    model = ExtSummModel(weight_matrix, neg_pos_ratio=neg_pos_ratio)
     print("Model initialization completed")
 
     #convert_idx_to_sent_embeddings(weight_matrix, train_set[0])
