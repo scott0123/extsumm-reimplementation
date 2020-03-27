@@ -83,7 +83,7 @@ def create_embeddings(glove_dir):
     return np.asarray(embedding_matrix), word2idx
 
 
-def convert_words_to_embeddings(weight_matrix, docs):
+def convert_idx_to_sent_embeddings(weight_matrix, docs):
     for k, doc in enumerate(docs):
         sent_embeddings = []
         for i, sentence in enumerate(doc):
@@ -125,7 +125,7 @@ def train_model():
     train_set = load_data(word2idx, data_paths, data_type="train")
     print("Train set loaded. Length:", len(train_set[0]))
 
-    convert_words_to_embeddings(weight_matrix, train_set[0])
+    convert_idx_to_sent_embeddings(weight_matrix, train_set[0])
     # train the model
     model.fit(train_set, lr=0.001, epochs=50, batch_size=128)
     # save the model
