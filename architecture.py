@@ -8,18 +8,15 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
-    def __init__(self, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
-                 dropout=0.3, glove_dir="embeddings", freeze_embedding=True):
+    def __init__(self, weight_matrix, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
+                 dropout=0.3, freeze_embedding=True):
         super().__init__()
-        weight_matrix, word2idx = self.create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", embedding_size)
         # Used to save model hyperparamers
         self.config = {
             "embedding_size": embedding_size,
             "gru_units": gru_units,
             "gru_layers": gru_layers,
-            "glove_dir": glove_dir,
             "freeze_embedding": freeze_embedding,
-            "word2idx": word2idx,
         }
         # Embedding layer
         self.embedding_layer = nn.Embedding.from_pretrained(
@@ -55,30 +52,6 @@ class ExtSummModel(nn.Module):
         else:
             self.device = torch.device("cpu")
         self.to(self.device)
-
-    def create_embeddings(self, glove_dir, embedding_size):
-        """
-        :param glove_dir:
-        :param vocab: dict, the entire vocabulary from word to index, from train, test and eval set
-        :return: embedding_matrix, word2idx
-        """
-        idx = 0
-        word2idx = dict()
-        embedding_matrix = []
-
-        with open(glove_dir, "r") as glove_in:
-            for line in glove_in:
-                line = line.split()
-                word = line[0]
-                word2idx[word] = idx
-                idx += 1
-                embedding = np.array(line[1:]).astype(np.float)
-                embedding_matrix.append(embedding)
-
-        # last entry reserved for OoV words
-        embedding_matrix.append(np.random.normal(scale=0.6, size=(embedding_size,)))
-        word2idx["UNK"] = idx
-        return np.asarray(embedding_matrix), word2idx
 
     def forward(self, documents, topic_start_ends):
         # documents: batch_size x num_sent x num_word x sent_dim (list of list of list)
@@ -175,18 +148,9 @@ class ExtSummModel(nn.Module):
         logits = self.dense2(h).squeeze(2)
         return logits
 
-    def convert_word_to_idx(self, data):
-        word2idx = self.config["word2idx"]
-        for doc, start_end, abstract, label in zip(*data):
-            for i, sentence in enumerate(doc):
-                # convert all the words to its corresponding indices. If UNK, assign to the last entry
-                doc[i] = [word2idx[word] if word in word2idx else len(word2idx) - 1
-                          for word in sentence]
-
     def fit(self, Xs, lr, epochs, batch_size=32):
         self.train()
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
-        self.convert_word_to_idx(Xs)        # convert word to its index
         for epoch in range(epochs):
             batch_Xs_generator = batch_generator(*Xs, batch_size=batch_size, shuffle=True)
             # Iterate over mini-batches for the current epoch
@@ -222,15 +186,13 @@ class ExtSummModel(nn.Module):
 
     def predict(self, Xs):
         self.eval()
-        self.convert_word_to_idx(Xs)
         docs, start_ends, abstracts, labels = Xs
         logits = self.forward(docs, start_ends)
-        confidence = F.sigmoid(logits) # FIXME this part is still wrong
+        confidence = F.sigmoid(logits)  # FIXME this part is still wrong
         return (confidence.numpy() > 0.5).float()
 
     def predict_and_eval(self, Xs):
         self.eval()
-        self.convert_word_to_idx(Xs)
         docs, start_ends, abstracts, labels = Xs
         logits = self.forward(docs, start_ends).to(self.device)
         ys = []
