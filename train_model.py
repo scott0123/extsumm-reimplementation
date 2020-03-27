@@ -139,7 +139,7 @@ def train_model():
 
     # compute positive-negative ratio
     neg_pos_ratio = get_ratio(train_set[-1])
-    print("Negative to positive ratio is ", pos_ratio)
+    print("Negative to positive ratio is ", neg_pos_ratio)
 
     # initialize model
     model = ExtSummModel(weight_matrix, word2idx, neg_pos_ratio=neg_pos_ratio)
