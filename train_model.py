@@ -14,15 +14,15 @@ def load_data(word2idx, data_paths, data_type="train"):
     labels = []
 
     # actual inputs
-    doc_path = doc_path + data_type
+    doc_path = os.path.join(doc_path, data_type)
     processed_data_path = os.path.join(cache_dir, data_type, "data.txt")
     if os.path.exists(processed_data_path):
         with open(processed_data_path, "rb") as fp:  # Unpickling
             data = pickle.load(fp)
         return data
 
-    for file in os.listdir(doc_path):
-        with open(os.path.join(doc_path, file), 'r') as doc_in:
+    for file_ in os.listdir(doc_path):
+        with open(os.path.join(doc_path, file_), 'r') as doc_in:
             doc_json = json.load(doc_in)
             one_doc = []
             for sentence in doc_json['inputs']:
@@ -36,16 +36,16 @@ def load_data(word2idx, data_paths, data_type="train"):
             start_ends.append(np.array(sections))
 
     # abstracts
-    abstract_path = abstract_path + data_type
+    abstract_path = os.path.join(abstract_path, data_type)
     for file in os.listdir(abstract_path):
-        with open(os.path.join(abstract_path, file), 'r') as abstract_in:
+        with open(os.path.join(abstract_path, file_), 'r') as abstract_in:
             for line in abstract_in.read().splitlines():
                 abstracts.append(line)  # should only have 1 line
 
     # labels
-    labels_path = labels_path + data_type
+    labels_path = os.path.join(labels_path, data_type)
     for file in os.listdir(labels_path):
-        with open(os.path.join(labels_path, file), 'r') as labels_in:
+        with open(os.path.join(labels_path, file_), 'r') as labels_in:
             labels_json = json.load(labels_in)
             labels.append(labels_json['labels'])
     convert_word_to_idx(word2idx, docs)
@@ -66,7 +66,7 @@ def create_embeddings(glove_dir, embedding_size):
 
     with open(glove_dir, "rb") as glove_in:
         for line in glove_in:
-            line = line.decode().split()
+            line = line.split()
             word = line[0]
             word2idx[word] = idx
             idx += 1
@@ -94,13 +94,17 @@ def train_model():
     weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", embedding_size)
 
     model = ExtSummModel(weight_matrix, word2idx)
+    print("Model initialization completed")
 
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
 
     # (doc, start_end, abstract, label)
-    train_set = load_data(word2idx, data_paths, data_type="train")
     test_set = load_data(word2idx, data_paths, data_type="test")
+    print("Test set loaded. Length:", len(test_set[0]))
     val_set = load_data(word2idx, data_paths, data_type="val")
+    print("Val set loaded. Length:", len(val_set[0]))
+    train_set = load_data(word2idx, data_paths, data_type="train")
+    print("Train set loaded. Length:", len(train_set[0]))
 
     # train the model
     model.fit(train_set, lr=0.001, epochs=50, batch_size=128)

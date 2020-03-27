@@ -53,8 +53,6 @@ class ExtSummModel(nn.Module):
             self.device = torch.device("cpu")
         self.to(self.device)
 
-
-
     def forward(self, documents, topic_start_ends):
         # documents: batch_size x num_sent x num_word x sent_dim (list of list of list)
         # topic_start_ends: batch_size x [num_topics x 2], sentence indexes should start from 1 (list of 2D np arrays)
@@ -102,15 +100,15 @@ class ExtSummModel(nn.Module):
         batch_size, seq_len, twice_hidden_size = pad_gru_output.shape
 
         doc_rep = hidden.view(batch_size, twice_hidden_size).expand(seq_len, -1, -1).transpose(1, 0)
-        topic_rep = np.zeros(pad_gru_output.shape)
+        topic_rep = torch.zeros(pad_gru_output.shape).to(self.device)
         hidden_size = self.config["gru_units"]
         # Pad zeros at the beginning and the end of hidden states
-        pad_gru_output = F.pad(pad_gru_output, pad=(0, 0, 1, 1), mode="constant", value=0).detach().numpy()
+        pad_gru_output = F.pad(pad_gru_output, pad=(0, 0, 1, 1), mode="constant", value=0)
         for batch_idx in range(batch_size):
             starts = topic_start_ends[batch_idx][:, 0]
             ends = topic_start_ends[batch_idx][:, 1]
             num_topics = len(starts)
-            topic_mat = np.zeros((num_topics, twice_hidden_size))  # num_topics x num_directions * hidden_size
+            topic_mat = torch.zeros((num_topics, twice_hidden_size)).to(self.device)  # num_topics x num_directions * hidden_size
             for topic_idx in range(num_topics):
                 # forward
                 topic_mat[topic_idx, :hidden_size] = pad_gru_output[batch_idx, ends[topic_idx], :hidden_size] - \
@@ -122,7 +120,6 @@ class ExtSummModel(nn.Module):
                 for sent_idx in range(starts[topic_idx] - 1, ends[topic_idx]):
                     topic_rep[batch_idx, sent_idx] = topic_mat[topic_idx]
         # batch_size x seq_len x num_directions * hidden_size
-        topic_rep = torch.from_numpy(topic_rep).float().to(self.device)
         return sent_rep, doc_rep, topic_rep
 
     def decoder(self, sent_rep, doc_rep, topic_rep):
