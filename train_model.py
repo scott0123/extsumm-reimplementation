@@ -17,26 +17,22 @@ def load_data(word2idx, data_paths, data_type="train"):
     processed_data_dir = os.path.join(cache_dir, data_type)
     if not os.path.isdir(processed_data_dir):
         os.makedirs(processed_data_dir)
-    processed_data_path = os.path.join(processed_data_dir, "data.txt")
-    if os.path.exists(processed_data_path):
+    processed_data_path = os.path.join(processed_data_dir, data_type + ".cache")
+    if os.path.isfile(processed_data_path):
         with open(processed_data_path, "rb") as fp:  # Unpickling
             data = pickle.load(fp)
+        print("> Loaded cached file for", data_type)
         return data
 
     # actual inputs
     doc_path = os.path.join(doc_path, data_type)
-    if os.path.exists(processed_data_path):
-        with open(processed_data_path, "rb") as fp:  # Unpickling
-            data = pickle.load(fp)
-        return data
-
     for file_ in os.listdir(doc_path):
         with open(os.path.join(doc_path, file_), 'r') as doc_in:
             doc_json = json.load(doc_in)
             one_doc = []
             for sentence in doc_json['inputs']:
                 one_doc.append(sentence['tokens'])
-            docs.append(one_doc)
+            docs.append(convert_doc_to_idx(word2idx, one_doc))
             section_start = 1
             sections = []
             for section_len in doc_json['section_lengths']:
@@ -57,10 +53,22 @@ def load_data(word2idx, data_paths, data_type="train"):
         with open(os.path.join(labels_path, file_), 'r') as labels_in:
             labels_json = json.load(labels_in)
             labels.append(labels_json['labels'])
-    convert_word_to_idx(word2idx, docs)
+
     with open(processed_data_path, "wb") as fp:  # Pickling
         pickle.dump((docs, start_ends, abstracts, labels), fp)
     return docs, start_ends, abstracts, labels
+
+
+def convert_doc_to_idx(word2idx, doc):
+    idx_doc = []
+    for i, sentence in enumerate(doc):
+        # convert all the words to its corresponding indices. If UNK, skip the word
+        word_indexes = []
+        for word in sentence:
+            if word in word2idx:
+                word_indexes.append(word2idx[word])
+        idx_doc.append(word_indexes)
+    return idx_doc
 
 
 def create_embeddings(glove_dir):
@@ -68,6 +76,17 @@ def create_embeddings(glove_dir):
     :param glove_dir:
     :return: embedding_matrix, word2idx
     """
+    cache_dir = "cache"
+    processed_data_dir = os.path.join(cache_dir, "embeddings")
+    if not os.path.isdir(processed_data_dir):
+        os.makedirs(processed_data_dir)
+    processed_data_path = os.path.join(processed_data_dir, "embeddings.cache")
+    if os.path.exists(processed_data_path):
+        with open(processed_data_path, "rb") as fp:  # Unpickling
+            data = pickle.load(fp)
+        print("> Loaded cached file for embeddings")
+        return data
+
     idx = 0
     word2idx = dict()
     embedding_matrix = []
@@ -78,9 +97,11 @@ def create_embeddings(glove_dir):
             word = line[0]
             word2idx[word] = idx
             idx += 1
-            embedding = np.array(line[1:]).astype(np.float)
+            embedding = np.array(line[1:]).astype(np.float32)
             embedding_matrix.append(embedding)
 
+    with open(processed_data_path, "wb") as fp:
+        pickle.dump((np.asarray(embedding_matrix), word2idx), fp)
     return np.asarray(embedding_matrix), word2idx
 
 
@@ -93,15 +114,15 @@ def convert_idx_to_sent_embeddings(weight_matrix, docs):
             for j, word_index in enumerate(sentence):
                 if word_index >= 0:
                     word_embeddings.append(weight_matrix[word_index])
-            if len(word_embeddings) > 0:
+            if len(word_embeddings) > 0: # FIXME this line is problematic
                 word_embeddings = np.stack(word_embeddings)
                 # Average of word embeddings
                 sent_embeddings.append(np.mean(word_embeddings, axis=0))
         docs[k] = sent_embeddings
 
 
-def get_pos_ratio(labels):
-    sampled = np.random.choice(len(labels), 50000, replace=False)
+def get_ratio(labels):
+    sampled = np.random.choice(len(labels), 5000, replace=False)
     pos = neg = 0.0
     for idx in sampled:
         counted = Counter(labels[idx])
@@ -110,22 +131,12 @@ def get_pos_ratio(labels):
     return neg / pos
 
 
-def convert_word_to_idx(word2idx, docs):
-    for doc in docs:
-        for i, sentence in enumerate(doc):
-            # convert all the words to its corresponding indices. If UNK, skip the word
-            word_indexes = []
-            for word in sentence:
-                if word in word2idx:
-                    word_indexes.append(word2idx[word])
-            doc[i] = word_indexes
-
 
 def train_model():
-    # Perform a forward cycle with fictitious data
     glove_dir = "embeddings"
     embedding_size = 300
     weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
+    print("Created embeddings")
 
     # load data
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
@@ -138,16 +149,15 @@ def train_model():
     print("Train set loaded. Length:", len(train_set[0]))
 
     # compute positive-negative ratio
-    pos_ratio = get_pos_ratio(train_set[-1])
-    print("Negative to positive ratio is ", pos_ratio)
+    neg_pos_ratio = get_ratio(test_set[-1])
+    print("Negative to positive ratio is {:.2f}".format(neg_pos_ratio))
 
     # initialize model
-    model = ExtSummModel(weight_matrix, neg_pos_ratio=pos_ratio)
+    model = ExtSummModel(weight_matrix, neg_pos_ratio=neg_pos_ratio)
     print("Model initialization completed")
 
-    convert_idx_to_sent_embeddings(weight_matrix, train_set[0])
     # train the model
-    model.fit(train_set, lr=0.001, epochs=50, batch_size=128)
+    model.fit(train_set, lr=0.0001, epochs=5, batch_size=32)
     # save the model
     curr_dir = os.path.dirname(os.path.realpath(__file__))
     model_dir = os.path.join(curr_dir, "model")

@@ -12,6 +12,9 @@ embeddings/
 # arxiv-dataset
 arxiv-dataset/
 
+# cache
+cache/
+
 ### PYTHON SPECIFIC GITIGNORE ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
