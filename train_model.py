@@ -27,15 +27,15 @@ def load_data(word2idx, data_paths, data_type="train"):
     # actual inputs
     doc_path = os.path.join(doc_path, data_type)
     for file_ in os.listdir(doc_path):
-        with open(os.path.join(doc_path, file_), 'r') as doc_in:
+        with open(os.path.join(doc_path, file_), "r") as doc_in:
             doc_json = json.load(doc_in)
             one_doc = []
-            for sentence in doc_json['inputs']:
-                one_doc.append(sentence['tokens'])
+            for sentence in doc_json["inputs"]:
+                one_doc.append(sentence["tokens"])
             docs.append(convert_doc_to_idx(word2idx, one_doc))
             section_start = 1
             sections = []
-            for section_len in doc_json['section_lengths']:
+            for section_len in doc_json["section_lengths"]:
                 sections.append([section_start, section_start + section_len - 1])
                 section_start += section_len
             start_ends.append(np.array(sections))
@@ -43,19 +43,18 @@ def load_data(word2idx, data_paths, data_type="train"):
     # abstracts
     abstract_path = os.path.join(abstract_path, data_type)
     for file_ in os.listdir(abstract_path):
-        with open(os.path.join(abstract_path, file_), 'r') as abstract_in:
-            for line in abstract_in.read().splitlines():
-                abstracts.append(line)  # should only have 1 line
+        with open(os.path.join(abstract_path, file_), "r") as f:
+            abstracts.append(f.readline())
 
     # labels
     labels_path = os.path.join(labels_path, data_type)
     for file_ in os.listdir(labels_path):
-        with open(os.path.join(labels_path, file_), 'r') as labels_in:
-            labels_json = json.load(labels_in)
-            labels.append(labels_json['labels'])
+        with open(os.path.join(labels_path, file_), "r") as f:
+            labels_json = json.load(f)
+            labels.append(labels_json["labels"])
 
-    with open(processed_data_path, "wb") as fp:  # Pickling
-        pickle.dump((docs, start_ends, abstracts, labels), fp)
+    with open(processed_data_path, "wb") as f:  # Pickling
+        pickle.dump((docs, start_ends, abstracts, labels), f)
     return docs, start_ends, abstracts, labels
 
 
@@ -134,6 +133,7 @@ def train_model():
     print("Val set loaded. Length:", len(val_set[0]))
     train_set = load_data(word2idx, data_paths, data_type="train")
     print("Train set loaded. Length:", len(train_set[0]))
+    print("Data lengths in training set:", len(train_set[0]), len(train_set[1]), len(train_set[2]), len(train_set[3]))
 
     # compute positive-negative ratio
     neg_pos_ratio = get_ratio(test_set[-1])
