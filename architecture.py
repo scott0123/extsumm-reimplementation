@@ -85,7 +85,7 @@ class ExtSummModel(nn.Module):
             avg_sent_vecs = []
             for sent in doc:
                 word_indices_tensor = torch.LongTensor(sent).to(self.device)
-                word_embedding_tensor = self.embedding_layer(word_indices_tensor).float()
+                word_embedding_tensor = self.embedding_layer(word_indices_tensor)
                 avg_sent_vec = torch.mean(word_embedding_tensor, dim=0)
                 avg_sent_vecs.append(avg_sent_vec)
             embeddings.append(torch.stack(avg_sent_vecs).to(self.device))
