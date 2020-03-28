@@ -55,22 +55,12 @@ class ExtSummModel(nn.Module):
         self.to(self.device)
 
     def forward(self, documents, topic_start_ends):
-        from time import time
         # documents: batch_size x num_sent x num_word x sent_dim (list of list of list)
         # topic_start_ends: batch_size x [num_topics x 2], sentence indexes should start from 1 (list of 2D np arrays)
-        start = time()
         sent_encoded = self.sent_encoder(documents)   # (batch_size x num_sent x num_word x word_dim)
-        end = time()
-        print("=== Time for sent_encoder: {:.2f} seconds".format(end - start))
         # (batch_size x num_sent x num_word x word_dim) -> (batch_size x num_word x word_dim)
-        start = time()
         sent_rep, doc_rep, topic_rep = self.doc_encoder(sent_encoded, topic_start_ends)
-        end = time()
-        print("=== Time for doc_encoder: {:.2f} seconds".format(end - start))
-        start = time()
         logits = self.decoder(sent_rep, doc_rep, topic_rep)
-        end = time()
-        print("=== Time for decoder: {:.2f} seconds".format(end - start))
         return logits
 
     def sent_encoder(self, documents):
@@ -90,7 +80,6 @@ class ExtSummModel(nn.Module):
                 avg_sent_vecs.append(avg_sent_vec)
             embeddings.append(torch.stack(avg_sent_vecs).to(self.device))
             actual_lengths.append(len(doc))
-
         padded_embeddings = pad_sequence(
             embeddings,
             batch_first=True,
@@ -162,25 +151,18 @@ class ExtSummModel(nn.Module):
         return logits
 
     def fit(self, Xs, lr, epochs, batch_size=32):
-        from time import time
         self.train()
         neg_pos_ratio = torch.FloatTensor([self.config["neg_pos_ratio"]]).to(self.device)
         optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         for epoch in range(epochs):
-            start = time()
             batch_Xs_generator = batch_generator(*Xs, batch_size=batch_size, shuffle=True)
-            end = time()
-            print("= Total time for batch_generator(): {:.2f} seconds".format(end - start))
             # Iterate over mini-batches for the current epoch
             for batch, batch_Xs in enumerate(batch_Xs_generator):
                 docs, start_ends, abstracts, labels = batch_Xs
                 # Clear the gradients of parameters
                 optimizer.zero_grad()
                 # Perform forward pass to get neural network output
-                start = time()
                 logits = self.forward(docs, start_ends).to(self.device)
-                end = time()
-                print("== Total time for forward(): {:.2f} seconds".format(end - start))
                 # True labels
                 batch_ys = []
                 for label in labels:
@@ -188,7 +170,6 @@ class ExtSummModel(nn.Module):
                 batch_ys_tensor = pad_sequence(batch_ys, padding_value=-1).permute(1, 0).to(self.device)
                 label_mask = batch_ys_tensor.gt(-1).float()
                 # Calculate the loss
-                start = time()
                 loss = F.binary_cross_entropy_with_logits(
                     logits,
                     batch_ys_tensor,
@@ -196,19 +177,11 @@ class ExtSummModel(nn.Module):
                     pos_weight=neg_pos_ratio,
                 )
                 accuracy = self.calculate_accuracy(batch_ys_tensor, labels, logits)
-                end = time()
-                print("== Total time for loss and acc: {:.2f} seconds".format(end - start))
                 # Call `backward()` on `loss` for back-propagation to compute
                 # gradients w.r.t. model parameters
-                start = time()
                 loss.backward()
-                end = time()
-                print("== Total time for backward(): {:.2f} seconds".format(end - start))
                 # Perform one step of parameter update using the newly-computed gradients
-                start = time()
                 optimizer.step()
-                end = time()
-                print("== Total time for optimizer.step(): {:.2f} seconds".format(end - start))
                 print(f"Epoch {epoch+1}, batch {batch+1}, loss={loss.item():.4f}, acc={accuracy:.4f}")
 
     @staticmethod

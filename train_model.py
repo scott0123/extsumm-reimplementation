@@ -67,6 +67,8 @@ def convert_doc_to_idx(word2idx, doc):
         for word in sentence:
             if word in word2idx:
                 word_indexes.append(word2idx[word])
+        if len(word_indexes) == 0:
+            word_indexes.append(word2idx["."])
         idx_doc.append(word_indexes)
     return idx_doc
 
@@ -105,22 +107,6 @@ def create_embeddings(glove_dir):
     return np.asarray(embedding_matrix), word2idx
 
 
-def convert_idx_to_sent_embeddings(weight_matrix, docs):
-    for k, doc in enumerate(docs):
-        sent_embeddings = []
-        for i, sentence in enumerate(doc):
-            word_embeddings = []
-            # convert all the words to its corresponding embeddings. If UNK, skip the word
-            for j, word_index in enumerate(sentence):
-                if word_index >= 0:
-                    word_embeddings.append(weight_matrix[word_index])
-            if len(word_embeddings) > 0: # FIXME this line is problematic
-                word_embeddings = np.stack(word_embeddings)
-                # Average of word embeddings
-                sent_embeddings.append(np.mean(word_embeddings, axis=0))
-        docs[k] = sent_embeddings
-
-
 def get_ratio(labels):
     sampled = np.random.choice(len(labels), 5000, replace=False)
     pos = neg = 0.0
@@ -156,14 +142,21 @@ def train_model():
     model = ExtSummModel(weight_matrix, neg_pos_ratio=neg_pos_ratio)
     print("Model initialization completed")
 
-    # train the model
-    model.fit(train_set, lr=0.0001, epochs=5, batch_size=32)
-    # save the model
     curr_dir = os.path.dirname(os.path.realpath(__file__))
     model_dir = os.path.join(curr_dir, "model")
     if not os.path.isdir(model_dir):
         os.mkdir(model_dir)
-    model.save(os.path.join(model_dir, "extsumm.bin"))
+    # train the model
+    model.fit(train_set, lr=0.001, epochs=1, batch_size=32)
+    model.save(os.path.join(model_dir, "extsumm-1.bin"))
+    model.fit(train_set, lr=0.0008, epochs=1, batch_size=32)
+    model.save(os.path.join(model_dir, "extsumm-2.bin"))
+    model.fit(train_set, lr=0.0004, epochs=1, batch_size=32)
+    model.save(os.path.join(model_dir, "extsumm-3.bin"))
+    model.fit(train_set, lr=0.0002, epochs=1, batch_size=32)
+    model.save(os.path.join(model_dir, "extsumm-4.bin"))
+    model.fit(train_set, lr=0.0001, epochs=1, batch_size=32)
+    model.save(os.path.join(model_dir, "extsumm-5.bin"))
 
 
 def main():
