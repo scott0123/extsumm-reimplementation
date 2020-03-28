@@ -223,8 +223,8 @@ class ExtSummModel(nn.Module):
         self.eval()
         docs, start_ends, abstracts, labels = Xs
         logits = self.forward(docs, start_ends)
-        confidence = F.sigmoid(logits)  # FIXME this part is still wrong
-        return (confidence.numpy() > 0.5).float()
+        confidence = torch.sigmoid(logits)  # FIXME this part is still wrong
+        return confidence.detach().cpu().numpy()
 
     def predict_and_eval(self, Xs):
         self.eval()
@@ -246,10 +246,10 @@ class ExtSummModel(nn.Module):
         torch.save(model_state, model_path)
 
     @classmethod
-    def load(cls, model_path):
+    def load(cls, weight_matrix, model_path):
         model_state = torch.load(str(model_path), map_location=lambda storage, loc: storage)
         args = model_state["config"]
-        model = cls(**args)
+        model = cls(weight_matrix, **args)
         model.load_state_dict(model_state["state_dict"])
         # Use GPU if available
         if torch.cuda.is_available():
