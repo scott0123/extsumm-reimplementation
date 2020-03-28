@@ -67,6 +67,9 @@ def convert_doc_to_idx(word2idx, doc):
         for word in sentence:
             if word in word2idx:
                 word_indexes.append(word2idx[word])
+        # guard against completely empty sentences
+        if len(word_indexes) == 0:
+            word_indexes.append(word2idx["."])
         idx_doc.append(word_indexes)
     return idx_doc
 
