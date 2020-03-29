@@ -32,12 +32,9 @@ class ExtSummModel(nn.Module):
             batch_first=True,
             bidirectional=True,
         )
-        # Attention-related parameters (*4 because we use concatenated representations, each being 2)
-        self.v_attention = nn.Parameter(torch.randn(gru_units * 4, 1))
-        self.W_attention = nn.Parameter(torch.randn(gru_units * 4, gru_units * 4))
         # Dense layer 1
         self.dense1 = nn.Linear(
-            in_features=gru_units * 4,
+            in_features=gru_units * 6,
             out_features=dense_units,
         )
         # Dropout layer
@@ -123,27 +120,8 @@ class ExtSummModel(nn.Module):
         return sent_rep, doc_rep, topic_rep
 
     def decoder(self, sent_rep, doc_rep, topic_rep):
-        # calculating (d:sr) and (l:sr)
-        cat_doc_sent = torch.cat((doc_rep, sent_rep), 2)
-        cat_topic_sent = torch.cat((topic_rep, sent_rep), 2)
-        # calculating Wa(d:sr) and Wa(l:sr)
-        W_ds_mult = torch.matmul(cat_doc_sent, self.W_attention)
-        W_ts_mult = torch.matmul(cat_topic_sent, self.W_attention)
-        # calculating score = v * tanh(...)
-        doc_scores = torch.matmul(torch.tanh(W_ds_mult), self.v_attention)
-        topic_scores = torch.matmul(torch.tanh(W_ts_mult), self.v_attention)
-        # calculating weight = score^d / (score^d + score^l)
-        # calculating weight = score^l / (score^d + score^l)
-        #sum_scores = doc_scores + topic_scores # TODO: paper different from implementation
-        #doc_weights = doc_scores / sum_scores # TODO: paper different from implementation
-        #topic_weights = topic_scores / sum_scores # TODO: paper different from implementation
-        doc_weights = F.softmax(doc_scores, dim=1)
-        topic_weights = F.softmax(topic_scores, dim=1)
-        # calculating context = weight^d * d + weight^l * l
-        context = doc_weights * doc_rep + topic_weights * topic_rep
-        # calculating input = (sr:context)
-        input_ = torch.cat((sent_rep, context), 2)
-        h = self.dense1(input_)
+        cat = torch.cat((doc_rep, topic_rep, sent_rep), 2)
+        h = self.dense1(cat)
         h = F.relu(h)
         h = self.dropout(h)
         # final part altered to use logits for computational stability
