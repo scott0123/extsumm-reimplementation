@@ -35,8 +35,13 @@ def load_data(word2idx, data_paths, data_type="train"):
             docs.append(convert_doc_to_idx(word2idx, one_doc))
             section_start = 1
             sections = []
+            doc_length = len(doc_json["inputs"])
             for section_len in doc_json["section_lengths"]:
-                sections.append([section_start, section_start + section_len - 1])
+                end = section_start + section_len - 1
+                if end > doc_length:
+                    print(f"section end {end} is larger than doc_length {doc_length} in file {file_}")
+                    end = doc_length
+                sections.append([section_start, end])
                 section_start += section_len
             start_ends.append(np.array(sections))
 
