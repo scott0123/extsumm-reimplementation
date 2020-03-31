@@ -15,6 +15,10 @@ def load_data(word2idx, data_paths, data_type="train"):
     abstracts = []
     labels = []
 
+    docs_files = []
+    abstracts_files = []
+    labels_files = []
+
     processed_data_dir = os.path.join(cache_dir, data_type)
     if not os.path.isdir(processed_data_dir):
         os.makedirs(processed_data_dir)
@@ -28,6 +32,8 @@ def load_data(word2idx, data_paths, data_type="train"):
     # actual inputs
     doc_path = os.path.join(doc_path, data_type)
     for file_ in os.listdir(doc_path):
+        docs_files.append(file_)
+    for file_ in sorted(docs_files):
         with open(os.path.join(doc_path, file_), "r") as doc_in:
             doc_json = json.load(doc_in)
             one_doc = []
@@ -49,12 +55,16 @@ def load_data(word2idx, data_paths, data_type="train"):
     # abstracts
     abstract_path = os.path.join(abstract_path, data_type)
     for file_ in os.listdir(abstract_path):
+        abstracts_files.append(file_)
+    for file_ in sorted(abstracts_files):
         with open(os.path.join(abstract_path, file_), "r") as f:
             abstracts.append(f.readline())
 
     # labels
     labels_path = os.path.join(labels_path, data_type)
     for file_ in os.listdir(labels_path):
+        labels_files.append(file_)
+    for file_ in sorted(labels_files):
         with open(os.path.join(labels_path, file_), "r") as f:
             labels_json = json.load(f)
             labels.append(labels_json["labels"])
