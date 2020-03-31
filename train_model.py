@@ -78,7 +78,7 @@ def convert_doc_to_idx(word2idx, doc):
     return idx_doc
 
 
-def create_embeddings(glove_dir):
+def create_embeddings(glove_dir, train_input_path, vocab_size=50000):
     """
     :param glove_dir:
     :return: embedding_matrix, word2idx
@@ -94,7 +94,9 @@ def create_embeddings(glove_dir):
         print("> Loaded cached file for embeddings")
         return data
 
-    idx = 0
+    top_words = get_top_words(train_input_path)
+
+    glove_dict = dict()
     word2idx = dict()
     embedding_matrix = []
 
@@ -102,10 +104,16 @@ def create_embeddings(glove_dir):
         for line in glove_in:
             line = line.split()
             word = line[0]
+            glove_dict[word] = np.array(line[1:]).astype(np.float32)
+
+    idx = 0
+    for i, (word, count) in enumerate(top_words):
+        if word in glove_dict:
             word2idx[word] = idx
+            embedding_matrix.append(glove_dict[word])
             idx += 1
-            embedding = np.array(line[1:]).astype(np.float32)
-            embedding_matrix.append(embedding)
+            if idx >= vocab_size:
+                break
 
     with open(processed_data_path, "wb") as fp:
         pickle.dump((np.asarray(embedding_matrix), word2idx), fp)
@@ -122,11 +130,23 @@ def get_ratio(labels):
     return neg / pos
 
 
+def get_top_words(input_path, size=60000):
+    all_tokens = []
+    for file_ in os.listdir(input_path):
+        with open(os.path.join(input_path, file_), "r") as doc_in:
+            doc_json = json.load(doc_in)
+            for sentence in doc_json["inputs"]:
+                all_tokens.append(sentence["tokens"])
+    print(f"{len(all_tokens)} tokens are found in training data")
+    counter = Counter(all_tokens)
+    word_list = counter.most_common(size)
+    return word_list
+
 
 def train_model():
     glove_dir = "embeddings"
     embedding_size = 300
-    weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
+    weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", "arxiv/inputs/train")
     print("Created embeddings")
 
     # load data
@@ -163,6 +183,19 @@ def train_model():
     model.save(os.path.join(model_dir, "extsumm-4.bin"))
     model.fit(train_set, lr=0.0001, epochs=1, batch_size=32)
     model.save(os.path.join(model_dir, "extsumm-5.bin"))
+
+
+def test_top_embeddings():
+    glove_dir = "embeddings"
+    embedding_size = 300
+    weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", "arxiv/inputs/train")
+    print(weight_matrix.shape)
+    print("\n")
+    print(len(word2idx))
+    print("\n")
+    print(word2idx)
+    print("\n")
+    print(weight_matrix)
 
 
 def main():
