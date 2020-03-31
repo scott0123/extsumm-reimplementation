@@ -37,7 +37,7 @@ class ExtSummModel(nn.Module):
         self.W_attention = nn.Parameter(torch.randn(gru_units * 4, gru_units * 4))
         # Dense layer 1
         self.dense1 = nn.Linear(
-            in_features=gru_units * 4,
+            in_features=gru_units * 2,
             out_features=dense_units,
         )
         # Dropout layer
@@ -59,8 +59,8 @@ class ExtSummModel(nn.Module):
         # topic_start_ends: batch_size x [num_topics x 2], sentence indexes should start from 1 (list of 2D np arrays)
         sent_encoded = self.sent_encoder(documents)   # (batch_size x num_sent x num_word x word_dim)
         # (batch_size x num_sent x num_word x word_dim) -> (batch_size x num_word x word_dim)
-        sent_rep, doc_rep, topic_rep = self.doc_encoder(sent_encoded, topic_start_ends)
-        logits = self.decoder(sent_rep, doc_rep, topic_rep)
+        sent_rep= self.doc_encoder(sent_encoded, topic_start_ends)
+        logits = self.decoder(sent_rep)
         return logits
 
     def sent_encoder(self, documents):
@@ -97,53 +97,12 @@ class ExtSummModel(nn.Module):
 
         pad_gru_output, _ = pad_packed_sequence(gru_out_packed, batch_first=True)
         sent_rep = pad_gru_output  # batch_size x seq_len x num_directions * hidden_size
-        batch_size, seq_len, twice_hidden_size = pad_gru_output.shape
 
-        doc_rep = hidden.view(batch_size, twice_hidden_size).expand(seq_len, -1, -1).transpose(1, 0)
-        topic_rep = torch.zeros(pad_gru_output.shape).to(self.device)
-        hidden_size = self.config["gru_units"]
-        # Pad zeros at the beginning and the end of hidden states
-        pad_gru_output = F.pad(pad_gru_output, pad=(0, 0, 1, 1), mode="constant", value=0)
-        for batch_idx in range(batch_size):
-            starts = topic_start_ends[batch_idx][:, 0]
-            ends = topic_start_ends[batch_idx][:, 1]
-            num_topics = len(starts)
-            topic_mat = torch.zeros((num_topics, twice_hidden_size)).to(self.device)  # num_topics x num_directions * hidden_size
-            for topic_idx in range(num_topics):
-                # forward
-                topic_mat[topic_idx, :hidden_size] = pad_gru_output[batch_idx, ends[topic_idx], :hidden_size] - \
-                                                     pad_gru_output[batch_idx, starts[topic_idx] - 1, :hidden_size]
-                # backward
-                topic_mat[topic_idx, hidden_size:] = pad_gru_output[batch_idx, starts[topic_idx], hidden_size:] - \
-                                                     pad_gru_output[batch_idx, ends[topic_idx] + 1, hidden_size:]
-            for topic_idx in range(num_topics):
-                for sent_idx in range(starts[topic_idx] - 1, ends[topic_idx]):
-                    topic_rep[batch_idx, sent_idx] = topic_mat[topic_idx]
-        # batch_size x seq_len x num_directions * hidden_size
-        return sent_rep, doc_rep, topic_rep
+        return sent_rep
 
-    def decoder(self, sent_rep, doc_rep, topic_rep):
+    def decoder(self, sent_rep):
         # calculating (d:sr) and (l:sr)
-        cat_doc_sent = torch.cat((doc_rep, sent_rep), 2)
-        cat_topic_sent = torch.cat((topic_rep, sent_rep), 2)
-        # calculating Wa(d:sr) and Wa(l:sr)
-        W_ds_mult = torch.matmul(cat_doc_sent, self.W_attention)
-        W_ts_mult = torch.matmul(cat_topic_sent, self.W_attention)
-        # calculating score = v * tanh(...)
-        doc_scores = torch.matmul(torch.tanh(W_ds_mult), self.v_attention)
-        topic_scores = torch.matmul(torch.tanh(W_ts_mult), self.v_attention)
-        # calculating weight = score^d / (score^d + score^l)
-        # calculating weight = score^l / (score^d + score^l)
-        #sum_scores = doc_scores + topic_scores # TODO: paper different from implementation
-        #doc_weights = doc_scores / sum_scores # TODO: paper different from implementation
-        #topic_weights = topic_scores / sum_scores # TODO: paper different from implementation
-        doc_weights = F.softmax(doc_scores, dim=1)
-        topic_weights = F.softmax(topic_scores, dim=1)
-        # calculating context = weight^d * d + weight^l * l
-        context = doc_weights * doc_rep + topic_weights * topic_rep
-        # calculating input = (sr:context)
-        input_ = torch.cat((sent_rep, context), 2)
-        h = self.dense1(input_)
+        h = self.dense1(sent_rep)
         h = F.relu(h)
         h = self.dropout(h)
         # final part altered to use logits for computational stability
