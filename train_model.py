@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 from collections import Counter
 from architecture import ExtSummModel
+from collections import defaultdict
 
 
 def load_data(word2idx, data_paths, data_type="train"):
@@ -131,14 +132,14 @@ def get_ratio(labels):
 
 
 def get_top_words(input_path, size=60000):
-    all_tokens = []
+    word_count = defaultdict(int)
     for file_ in os.listdir(input_path):
         with open(os.path.join(input_path, file_), "r") as doc_in:
             doc_json = json.load(doc_in)
             for sentence in doc_json["inputs"]:
-                all_tokens.append(sentence["tokens"])
-    print(f"{len(all_tokens)} tokens are found in training data")
-    counter = Counter(all_tokens)
+                for token in sentence["tokens"]:
+                    word_count[token] += 1
+    counter = Counter(word_count)
     word_list = counter.most_common(size)
     return word_list
 
