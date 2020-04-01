@@ -4,7 +4,6 @@ import pickle
 import numpy as np
 from collections import Counter
 from architecture import ExtSummModel
-from collections import defaultdict
 
 
 def load_data(word2idx, data_paths, data_type="train"):
@@ -31,7 +30,6 @@ def load_data(word2idx, data_paths, data_type="train"):
 
     # actual inputs
     doc_path = os.path.join(doc_path, data_type)
-    docs_files = []
     for file_ in os.listdir(doc_path):
         docs_files.append(file_)
     for file_ in sorted(docs_files):
@@ -55,7 +53,6 @@ def load_data(word2idx, data_paths, data_type="train"):
 
     # abstracts
     abstract_path = os.path.join(abstract_path, data_type)
-    abstracts_files = []
     for file_ in os.listdir(abstract_path):
         abstracts_files.append(file_)
     for file_ in sorted(abstracts_files):
@@ -64,7 +61,6 @@ def load_data(word2idx, data_paths, data_type="train"):
 
     # labels
     labels_path = os.path.join(labels_path, data_type)
-    labels_files = []
     for file_ in os.listdir(labels_path):
         labels_files.append(file_)
     for file_ in sorted(labels_files):
@@ -92,7 +88,7 @@ def convert_doc_to_idx(word2idx, doc):
     return idx_doc
 
 
-def create_embeddings(glove_dir, train_input_path, vocab_size=50000):
+def create_embeddings(glove_dir):
     """
     :param glove_dir:
     :return: embedding_matrix, word2idx
@@ -108,9 +104,7 @@ def create_embeddings(glove_dir, train_input_path, vocab_size=50000):
         print("> Loaded cached file for embeddings")
         return data
 
-    top_words = get_top_words(train_input_path)
-
-    glove_dict = dict()
+    idx = 0
     word2idx = dict()
     embedding_matrix = []
 
@@ -118,16 +112,10 @@ def create_embeddings(glove_dir, train_input_path, vocab_size=50000):
         for line in glove_in:
             line = line.split()
             word = line[0]
-            glove_dict[word] = np.array(line[1:]).astype(np.float32)
-
-    idx = 0
-    for i, (word, count) in enumerate(top_words):
-        if word in glove_dict:
             word2idx[word] = idx
-            embedding_matrix.append(glove_dict[word])
+            embedding = np.array(line[1:]).astype(np.float32)
+            embedding_matrix.append(embedding)
             idx += 1
-            if idx >= vocab_size:
-                break
 
     with open(processed_data_path, "wb") as fp:
         pickle.dump((np.asarray(embedding_matrix), word2idx), fp)
@@ -147,7 +135,7 @@ def get_ratio(labels):
 def train_model():
     glove_dir = "embeddings"
     embedding_size = 300
-    weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", "arxiv/inputs/train")
+    weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
     print("Created embeddings")
 
     # load data
@@ -177,19 +165,6 @@ def train_model():
     for epoch in range(50):
         model.fit(train_set, lr=1e-3, epochs=1, batch_size=32)
         model.save(os.path.join(model_dir, f"extsumm-{epoch+1}.bin"))
-
-
-def test_top_embeddings():
-    glove_dir = "embeddings"
-    embedding_size = 300
-    weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt", "arxiv/inputs/train")
-    print(weight_matrix.shape)
-    print("\n")
-    print(len(word2idx))
-    print("\n")
-    print(word2idx)
-    print("\n")
-    print(weight_matrix)
 
 
 def main():
