@@ -1,24 +1,24 @@
 import os
-import json
 import sys
+import json
 import numpy as np
-import rouge
 from train_model import load_data, create_embeddings
 from architecture import ExtSummModel, batch_generator
+import rouge
 import nltk
-nltk.download('punkt')
+nltk.download("punkt")
 
 
 # code used from https://pypi.org/project/py-rouge/
 def prepare_results(metric, p, r, f):
-    return '\t{}:\t{}: {:5.2f}\t{}: {:5.2f}\t{}: {:5.2f}'\
-        .format(metric, 'P', 100.0 * p, 'R', 100.0 * r, 'F1', 100.0 * f)
+    return "\t{}:\t{}: {:5.2f}\t{}: {:5.2f}\t{}: {:5.2f}"\
+        .format(metric, "P", 100.0 * p, "R", 100.0 * r, "F1", 100.0 * f)
 
 
-def print_rouge(weight_matrix, model_path, data, docs):
+def print_rouge(model_path, data, docs):
     # get the hypothesis text
     len_limit = 200
-    model = ExtSummModel.load(weight_matrix, model_path)
+    model = ExtSummModel.load(model_path)
     batch_Xs_generator = batch_generator(*data, batch_size=32, shuffle=False)
     predictions = []
     for batch, batch_Xs in enumerate(batch_Xs_generator):
@@ -38,14 +38,14 @@ def print_rouge(weight_matrix, model_path, data, docs):
             if temp_count > len_limit:
                 break
         for idx in sorted(selected_idx):
-            temp_abs.append(' '.join(doc[idx]))
-        hypothesis.append(' '.join(temp_abs))
+            temp_abs.append(" ".join(doc[idx]))
+        hypothesis.append(" ".join(temp_abs))
 
-    evaluator = rouge.Rouge(metrics=['rouge-n', 'rouge-l', 'rouge-w'],
+    evaluator = rouge.Rouge(metrics=["rouge-n", "rouge-l", "rouge-w"],
                             max_n=4,
                             limit_length=True,
                             length_limit=200,
-                            length_limit_type='words',
+                            length_limit_type="words",
                             apply_avg=True,
                             apply_best=False,
                             alpha=0.5,  # Default F1_score
@@ -53,7 +53,7 @@ def print_rouge(weight_matrix, model_path, data, docs):
                             stemming=True)
     scores = evaluator.get_scores(hypothesis, list(data[2]))
     for metric, results in sorted(scores.items(), key=lambda x: x[0]):
-        print(prepare_results(metric, results['p'], results['r'], results['f']))
+        print(prepare_results(metric, results["p"], results["r"], results["f"]))
 
 
 def load_test_docs(data_paths, data_type="test"):
@@ -64,11 +64,11 @@ def load_test_docs(data_paths, data_type="test"):
     for file_ in os.listdir(doc_path):
         doc_files.append(file_)
     for file_ in sorted(doc_files):
-        with open(os.path.join(doc_path, file_), 'r') as doc_in:
+        with open(os.path.join(doc_path, file_), "r") as doc_in:
             doc_json = json.load(doc_in)
             one_doc = []
-            for sentence in doc_json['inputs']:
-                one_doc.append(sentence['tokens'])
+            for sentence in doc_json["inputs"]:
+                one_doc.append(sentence["tokens"])
             docs.append(one_doc)
     return docs
 
@@ -76,12 +76,12 @@ def load_test_docs(data_paths, data_type="test"):
 def test_rouge():
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
     glove_dir = "embeddings"
-    model_path = sys.argv[1]
     embedding_size = 300
+    model_path = sys.argv[1]
     weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
     test_set = load_data(word2idx, data_paths, data_type="test")
     test_docs = load_test_docs(data_paths, data_type="test")
-    print_rouge(weight_matrix, model_path, test_set, test_docs)
+    print_rouge(model_path, test_set, test_docs)
 
 
 def main():

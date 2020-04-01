@@ -162,9 +162,11 @@ def train_model():
     if not os.path.isdir(model_dir):
         os.mkdir(model_dir)
     # train the model
+    lr = 1e-3
     for epoch in range(50):
-        model.fit(train_set, lr=1e-3, epochs=1, batch_size=32)
+        model.fit(train_set, lr=lr, epochs=1, batch_size=32)
         model.save(os.path.join(model_dir, f"extsumm-{epoch+1}.bin"))
+        lr = lr / 2
 
 
 def main():
