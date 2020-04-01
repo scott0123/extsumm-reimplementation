@@ -5,6 +5,8 @@ import numpy as np
 import rouge
 from train_model import load_data, create_embeddings
 from architecture import ExtSummModel, batch_generator
+import nltk
+nltk.download('punkt')
 
 
 # code used from https://pypi.org/project/py-rouge/
@@ -39,8 +41,6 @@ def print_rouge(weight_matrix, model_path, data, docs):
             temp_abs.append(' '.join(doc[idx]))
         hypothesis.append(' '.join(temp_abs))
 
-    import nltk
-    nltk.download('punkt')
     evaluator = rouge.Rouge(metrics=['rouge-n', 'rouge-l', 'rouge-w'],
                             max_n=4,
                             limit_length=True,
@@ -59,9 +59,11 @@ def print_rouge(weight_matrix, model_path, data, docs):
 def load_test_docs(data_paths, data_type="test"):
     doc_path, abstract_path, labels_path = data_paths
     docs = []
-
     doc_path = os.path.join(doc_path, data_type)
+    doc_files = []
     for file_ in os.listdir(doc_path):
+        doc_files.append(file_)
+    for file_ in sorted(doc_files):
         with open(os.path.join(doc_path, file_), 'r') as doc_in:
             doc_json = json.load(doc_in)
             one_doc = []

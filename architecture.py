@@ -131,7 +131,7 @@ class ExtSummModel(nn.Module):
     def fit(self, Xs, lr, epochs, batch_size=32):
         self.train()
         neg_pos_ratio = torch.FloatTensor([self.config["neg_pos_ratio"]]).to(self.device)
-        optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=1e-5)
         for epoch in range(epochs):
             batch_Xs_generator = batch_generator(*Xs, batch_size=batch_size, shuffle=True)
             # Iterate over mini-batches for the current epoch
@@ -174,7 +174,7 @@ class ExtSummModel(nn.Module):
         self.eval()
         docs, start_ends, abstracts, labels = Xs
         logits = self.forward(docs, start_ends)
-        confidence = torch.sigmoid(logits)  # FIXME this part is still wrong
+        confidence = torch.sigmoid(logits)
         return confidence.detach().cpu().numpy()
 
     def predict_and_eval(self, Xs):
@@ -211,7 +211,6 @@ class ExtSummModel(nn.Module):
         return model
 
 
-# taken from 01-intro-ner-pytorch/ner.py and modified
 def batch_generator(*data, batch_size=32, shuffle=True):
     batch_num = int(np.ceil(len(data[0]) / batch_size))
     index_array = list(range(len(data[0])))

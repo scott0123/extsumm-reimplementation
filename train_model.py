@@ -26,7 +26,10 @@ def load_data(word2idx, data_paths, data_type="train"):
 
     # actual inputs
     doc_path = os.path.join(doc_path, data_type)
+    docs_files = []
     for file_ in os.listdir(doc_path):
+        docs_files.append(file_)
+    for file_ in sorted(docs_files):
         with open(os.path.join(doc_path, file_), "r") as doc_in:
             doc_json = json.load(doc_in)
             one_doc = []
@@ -47,13 +50,19 @@ def load_data(word2idx, data_paths, data_type="train"):
 
     # abstracts
     abstract_path = os.path.join(abstract_path, data_type)
+    abstracts_files = []
     for file_ in os.listdir(abstract_path):
+        abstracts_files.append(file_)
+    for file_ in sorted(abstracts_files):
         with open(os.path.join(abstract_path, file_), "r") as f:
             abstracts.append(f.readline())
 
     # labels
     labels_path = os.path.join(labels_path, data_type)
+    labels_files = []
     for file_ in os.listdir(labels_path):
+        labels_files.append(file_)
+    for file_ in sorted(labels_files):
         with open(os.path.join(labels_path, file_), "r") as f:
             labels_json = json.load(f)
             labels.append(labels_json["labels"])
@@ -113,14 +122,13 @@ def create_embeddings(glove_dir):
 
 
 def get_ratio(labels):
-    sampled = np.random.choice(len(labels), 5000, replace=False)
+    sampled = np.random.choice(len(labels), 50000, replace=False)
     pos = neg = 0.0
     for idx in sampled:
         counted = Counter(labels[idx])
         pos += counted[1]
         neg += counted[0]
     return neg / pos
-
 
 
 def train_model():
@@ -141,7 +149,7 @@ def train_model():
     print("Data lengths in training set:", len(train_set[0]), len(train_set[1]), len(train_set[2]), len(train_set[3]))
 
     # compute positive-negative ratio
-    neg_pos_ratio = get_ratio(test_set[-1])
+    neg_pos_ratio = get_ratio(train_set[-1])
     print("Negative to positive ratio is {:.2f}".format(neg_pos_ratio))
 
     # initialize model
@@ -153,16 +161,9 @@ def train_model():
     if not os.path.isdir(model_dir):
         os.mkdir(model_dir)
     # train the model
-    model.fit(train_set, lr=0.001, epochs=1, batch_size=32)
-    model.save(os.path.join(model_dir, "extsumm-1.bin"))
-    model.fit(train_set, lr=0.0008, epochs=1, batch_size=32)
-    model.save(os.path.join(model_dir, "extsumm-2.bin"))
-    model.fit(train_set, lr=0.0004, epochs=1, batch_size=32)
-    model.save(os.path.join(model_dir, "extsumm-3.bin"))
-    model.fit(train_set, lr=0.0002, epochs=1, batch_size=32)
-    model.save(os.path.join(model_dir, "extsumm-4.bin"))
-    model.fit(train_set, lr=0.0001, epochs=1, batch_size=32)
-    model.save(os.path.join(model_dir, "extsumm-5.bin"))
+    for epoch in range(50):
+        model.fit(train_set, lr=1e-3, epochs=1, batch_size=32)
+        model.save(os.path.join(model_dir, f"extsumm-{epoch+1}.bin"))
 
 
 def main():
