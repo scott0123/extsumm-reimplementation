@@ -8,22 +8,30 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
-    def __init__(self, weight_matrix, embedding_size=300, gru_units=128, gru_layers=1, dense_units=128,
-                 dropout=0.3, freeze_embedding=True, neg_pos_ratio=47):
+    def __init__(self, weight_matrix=None, num_embeddings=40000, embedding_size=300, freeze_embedding=True,
+                 gru_units=128, gru_layers=1, dense_units=128, dropout=0.3, neg_pos_ratio=47):
         super().__init__()
+        if weight_matrix is not None:
+            num_embeddings = weight_matrix.shape[0]
         # Used to save model hyperparamers
         self.config = {
+            "num_embeddings": num_embeddings,
             "embedding_size": embedding_size,
+            "freeze_embedding": freeze_embedding,
             "gru_units": gru_units,
             "gru_layers": gru_layers,
+            "dense_units": dense_units,
+            "dropout": dropout,
             "neg_pos_ratio": neg_pos_ratio,
-            "freeze_embedding": freeze_embedding,
         }
         # Embedding layer
-        self.embedding_layer = nn.Embedding.from_pretrained(
-            torch.from_numpy(weight_matrix),
-            freeze=freeze_embedding,
-        )
+        if weight_matrix is not None:
+            self.embedding_layer = nn.Embedding.from_pretrained(
+                torch.from_numpy(weight_matrix),
+                freeze=freeze_embedding,
+            )
+        else:
+            self.embedding_layer = nn.Embedding(num_embeddings, embedding_size)
         # Bidirectional GRU layer
         self.bi_gru = nn.GRU(
             input_size=embedding_size,
@@ -32,15 +40,28 @@ class ExtSummModel(nn.Module):
             batch_first=True,
             bidirectional=True,
         )
-        # Dense layer 1
-        self.dense1 = nn.Linear(
+        # Dense layer (baseline)
+        self.dense_base = nn.Linear(
+            in_features=gru_units * 2,
+            out_features=dense_units,
+        )
+        # Dense layer (concat)
+        self.dense_concat = nn.Linear(
             in_features=gru_units * 6,
+            out_features=dense_units,
+        )
+        # Attention-related parameters (*4 because we use concatenated representations, each being 2)
+        self.v_attention = nn.Parameter(torch.randn(gru_units * 4, 1))
+        self.W_attention = nn.Parameter(torch.randn(gru_units * 4, gru_units * 4))
+        # Dense layer (attention)
+        self.dense_attn = nn.Linear(
+            in_features=gru_units * 4,
             out_features=dense_units,
         )
         # Dropout layer
         self.dropout = nn.Dropout(dropout)
-        # Dense layer 2
-        self.dense2 = nn.Linear(
+        # Final dense layer
+        self.dense_out = nn.Linear(
             in_features=dense_units,
             out_features=1,
         )
@@ -57,7 +78,7 @@ class ExtSummModel(nn.Module):
         sent_encoded = self.sent_encoder(documents)   # (batch_size x num_sent x num_word x word_dim)
         # (batch_size x num_sent x num_word x word_dim) -> (batch_size x num_word x word_dim)
         sent_rep, doc_rep, topic_rep = self.doc_encoder(sent_encoded, topic_start_ends)
-        logits = self.decoder(sent_rep, doc_rep, topic_rep)
+        logits = self.decoder_attention(sent_rep, doc_rep, topic_rep)
         return logits
 
     def sent_encoder(self, documents):
@@ -119,13 +140,56 @@ class ExtSummModel(nn.Module):
         # batch_size x seq_len x num_directions * hidden_size
         return sent_rep, doc_rep, topic_rep
 
-    def decoder(self, sent_rep, doc_rep, topic_rep):
-        cat = torch.cat((doc_rep, topic_rep, sent_rep), 2)
-        h = self.dense1(cat)
+    def doc_encoder_base(self, packed_sent_embeddings, topic_start_ends):
+        gru_out_packed, hidden = self.bi_gru(packed_sent_embeddings)
+
+        pad_gru_output, _ = pad_packed_sequence(gru_out_packed, batch_first=True)
+        sent_rep = pad_gru_output  # batch_size x seq_len x num_directions * hidden_size
+        return sent_rep, None, None
+
+    def decoder_attention(seld, sent_rep, doc_rep, topic_rep):
+        # calculating (d:sr) and (l:sr)
+        cat_doc_sent = torch.cat((doc_rep, sent_rep), 2)
+        cat_topic_sent = torch.cat((topic_rep, sent_rep), 2)
+        # calculating Wa(d:sr) and Wa(l:sr)
+        W_ds_mult = torch.matmul(cat_doc_sent, self.W_attention)
+        W_ts_mult = torch.matmul(cat_topic_sent, self.W_attention)
+        # calculating score = v * tanh(...)
+        doc_scores = torch.matmul(torch.tanh(W_ds_mult), self.v_attention)
+        topic_scores = torch.matmul(torch.tanh(W_ts_mult), self.v_attention)
+        # calculating weight = score^d / (score^d + score^l)
+        # calculating weight = score^l / (score^d + score^l)
+        #sum_scores = doc_scores + topic_scores # TODO: paper different from implementation
+        #doc_weights = doc_scores / sum_scores # TODO: paper different from implementation
+        #topic_weights = topic_scores / sum_scores # TODO: paper different from implementation
+        doc_weights = F.softmax(doc_scores, dim=1)
+        topic_weights = F.softmax(topic_scores, dim=1)
+        # calculating context = weight^d * d + weight^l * l
+        context = doc_weights * doc_rep + topic_weights * topic_rep
+        # calculating input = (sr:context)
+        input_ = torch.cat((sent_rep, context), 2)
+        h = self.dense_attn(input_)
         h = F.relu(h)
         h = self.dropout(h)
         # final part altered to use logits for computational stability
-        logits = self.dense2(h).squeeze(2)
+        logits = self.dense_out(h).squeeze(2)
+        return logits
+
+    def decoder_concat(self, sent_rep, doc_rep, topic_rep):
+        cat = torch.cat((doc_rep, topic_rep, sent_rep), 2)
+        h = self.dense_concat(cat)
+        h = F.relu(h)
+        h = self.dropout(h)
+        # final part altered to use logits for computational stability
+        logits = self.dense_out(h).squeeze(2)
+        return logits
+
+    def decoder_base(self, sent_rep, *_):
+        h = self.dense_base(sent_rep)
+        h = F.relu(h)
+        h = self.dropout(h)
+        # final part altered to use logits for computational stability
+        logits = self.dense_out(h).squeeze(2)
         return logits
 
     def fit(self, Xs, lr, epochs, batch_size=32):
@@ -197,10 +261,10 @@ class ExtSummModel(nn.Module):
         torch.save(model_state, model_path)
 
     @classmethod
-    def load(cls, weight_matrix, model_path):
+    def load(cls, model_path):
         model_state = torch.load(str(model_path), map_location=lambda storage, loc: storage)
         args = model_state["config"]
-        model = cls(weight_matrix, **args)
+        model = cls(**args)
         model.load_state_dict(model_state["state_dict"])
         # Use GPU if available
         if torch.cuda.is_available():
