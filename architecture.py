@@ -147,7 +147,7 @@ class ExtSummModel(nn.Module):
         sent_rep = pad_gru_output  # batch_size x seq_len x num_directions * hidden_size
         return sent_rep, None, None
 
-    def decoder_attention(seld, sent_rep, doc_rep, topic_rep):
+    def decoder_attention(self, sent_rep, doc_rep, topic_rep):
         # calculating (d:sr) and (l:sr)
         cat_doc_sent = torch.cat((doc_rep, sent_rep), 2)
         cat_topic_sent = torch.cat((topic_rep, sent_rep), 2)
