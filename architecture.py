@@ -8,7 +8,7 @@ from torch.nn.utils.rnn import pad_sequence, pad_packed_sequence, pack_padded_se
 
 # The Extractive Summarization Model, re-implemented
 class ExtSummModel(nn.Module):
-    def __init__(self, weight_matrix=None, num_embeddings=40000, embedding_size=300, freeze_embedding=True,
+    def __init__(self, weight_matrix=None, num_embeddings=400000, embedding_size=300, freeze_embedding=True,
                  gru_units=128, gru_layers=1, dense_units=128, dropout=0.3, neg_pos_ratio=47):
         super().__init__()
         if weight_matrix is not None:
@@ -296,7 +296,6 @@ def test_forward():
 
 def main():
     test_forward()
-
 
 if __name__ == "__main__":
     main()
