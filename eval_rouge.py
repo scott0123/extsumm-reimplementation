@@ -77,11 +77,12 @@ def test_rouge():
     data_paths = ("arxiv/inputs/", "arxiv/human-abstracts/", "arxiv/labels/")
     glove_dir = "embeddings"
     embedding_size = 300
-    model_path = sys.argv[1]
+    model_paths = sys.argv[1:]
     weight_matrix, word2idx = create_embeddings(f"{glove_dir}/glove.6B.{embedding_size}d.txt")
     test_set = load_data(word2idx, data_paths, data_type="test")
     test_docs = load_test_docs(data_paths, data_type="test")
-    print_rouge(model_path, test_set, test_docs)
+    for model_path in model_paths:
+        print_rouge(model_path, test_set, test_docs)
 
 
 def main():

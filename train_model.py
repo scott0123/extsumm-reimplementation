@@ -163,10 +163,11 @@ def train_model():
         os.mkdir(model_dir)
     # train the model
     lr = 1e-3
-    for epoch in range(50):
-        model.fit(train_set, lr=lr, epochs=1, batch_size=32)
-        model.save(os.path.join(model_dir, f"extsumm-{epoch+1}.bin"))
-        lr = lr / 2
+    for epoch in range(4, 50):
+        schedule = lr * (0.5 ** epoch)
+        schedule = max(schedule, 1e-4)
+        model.fit(train_set, lr=schedule, epochs=1, batch_size=32)
+        model.save(os.path.join(model_dir, f"extsumm-attention-{epoch+1}.bin"))
 
 
 def main():
