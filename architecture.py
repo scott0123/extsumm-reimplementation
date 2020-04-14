@@ -111,6 +111,11 @@ class ExtSummModel(nn.Module):
         return packed_sent_embeddings
 
     def doc_encoder(self, packed_sent_embeddings, topic_start_ends):
+        """
+        :param packed_sent_embeddings:
+        :param topic_start_ends: batch_size x [num_topics x 2], sentence indexes should start from 1 (list of 2D arrays)
+        :return: sentence embeddings, document embeddings, topic embeddings
+        """
         gru_out_packed, hidden = self.bi_gru(packed_sent_embeddings)
 
         pad_gru_output, _ = pad_packed_sequence(gru_out_packed, batch_first=True)
@@ -127,16 +132,12 @@ class ExtSummModel(nn.Module):
             ends = topic_start_ends[batch_idx][:, 1]
             num_topics = len(starts)
             topic_mat = torch.zeros((num_topics, twice_hidden_size)).to(self.device)  # num_topics x num_directions * hidden_size
+            topic_mat[:, :hidden_size] = pad_gru_output[batch_idx, ends, :hidden_size] - \
+                                          pad_gru_output[batch_idx, starts - 1, :hidden_size]
+            topic_mat[:, hidden_size:] = pad_gru_output[batch_idx, starts, hidden_size:] - \
+                                          pad_gru_output[batch_idx, ends + 1, hidden_size:]
             for topic_idx in range(num_topics):
-                # forward
-                topic_mat[topic_idx, :hidden_size] = pad_gru_output[batch_idx, ends[topic_idx], :hidden_size] - \
-                                                     pad_gru_output[batch_idx, starts[topic_idx] - 1, :hidden_size]
-                # backward
-                topic_mat[topic_idx, hidden_size:] = pad_gru_output[batch_idx, starts[topic_idx], hidden_size:] - \
-                                                     pad_gru_output[batch_idx, ends[topic_idx] + 1, hidden_size:]
-            for topic_idx in range(num_topics):
-                for sent_idx in range(starts[topic_idx] - 1, ends[topic_idx]):
-                    topic_rep[batch_idx, sent_idx] = topic_mat[topic_idx]
+                topic_rep[batch_idx, starts[topic_idx] - 1: ends[topic_idx]] = topic_mat[topic_idx]
         # batch_size x seq_len x num_directions * hidden_size
         return sent_rep, doc_rep, topic_rep
 
